@@ -192,7 +192,7 @@ def createFolder(path, imageCollection=False, overwrite=False,
              else ee.data.ASSET_TYPE_FOLDER)
     ee.data.createAsset({'type': ftype}, _path(path), overwrite)
     if public:
-        setAcl(path, 'public')
+        setAcl(_path(path), 'public')
 
 
 def _checkTaskCompleted(task_id):
@@ -258,7 +258,7 @@ def formatDate(date):
     return int(seconds * 1000)
 
 
-def ingestAsset(gs_uri, asset, date='', wait_timeout=0):
+def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands={}):
     '''
     Upload asset from GS to EE
 
@@ -266,6 +266,7 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0):
     `asset`        destination path
     `date`         optional date tag (datetime.datetime or int ms since epoch)
     `wait_timeout` if non-zero, wait timeout secs for task completion
+    `bands`        optional band name dictionary
     '''
     task_id = ee.data.newTaskId()[0]
     params = {'id': _path(asset),
@@ -273,6 +274,8 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0):
     if date:
         params['properties'] = {'system:time_start': formatDate(date),
                                 'system:time_end': formatDate(date)}
+    if bands:
+        params['bands'] = bands
     logging.debug('Ingesting {} to {}: {}'.format(gs_uri, asset, task_id))
     ee.data.startIngestion(task_id, params, True)
     if wait_timeout:
@@ -281,7 +284,7 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0):
 
 
 def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
-                timeout=300, clean=True):
+                timeout=300, clean=True, bands={}):
     '''
     Stage file to GS and ingest to EE
 
@@ -295,7 +298,7 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
     '''
     gs_uris = gsStage(filename, gs_prefix)
     try:
-        ingestAsset(gs_uris[0], asset, date, public, timeout)
+        ingestAsset(gs_uris[0], asset, date, timeout, bands)
         if public:
             setAcl(asset, 'public')
     except Exception as e:
@@ -304,8 +307,8 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
         gsRemove(gs_uris)
 
 
-def uploadAssets(files, assets, gs_prefix='', dates='', public=False,
-                 timeout=300, clean=True):
+def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
+                 timeout=300, clean=True, bands={}):
     '''
     Stage files to GS and ingest to EE
 
@@ -318,8 +321,12 @@ def uploadAssets(files, assets, gs_prefix='', dates='', public=False,
     `clean`        delete files from GS after completion
     '''
     gs_uris = gsStage(files, gs_prefix)
-    task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], public)
-                for i in range(len(files))]
+    if dates:
+        task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], timeout, bands)
+                    for i in range(len(files))]
+    else:
+        task_ids = [ingestAsset(gs_uris[i], assets[i], '', timeout, bands)
+                    for i in range(len(files))]
     try:
         waitForTasks(task_ids, timeout)
         if public:
