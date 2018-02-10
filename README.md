@@ -15,7 +15,7 @@ eu.createFolder('mycollection', imageCollection=True)
 
 # upload image to collection
 eu.upload('image.tif', 'mycollection/myasset')
-eu.setAcl('mycollection/myasset', 'public')
+eu.setAcl('mycollection', 'public')
 eu.ls('mycollection')
 ```
 

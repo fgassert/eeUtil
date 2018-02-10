@@ -17,7 +17,7 @@ eeUtil.createFolder('mycollection', imageCollection=True)
 
 # upload image to collection
 eeUtil.upload('image.tif', 'mycollection/myasset')
-eeUtil.setAcl('mycollection/myasset', 'public')
+eeUtil.setAcl('mycollection', 'public')
 eeUtil.ls('mycollection')
 ```
 '''
