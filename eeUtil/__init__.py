@@ -322,10 +322,10 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     '''
     gs_uris = gsStage(files, gs_prefix)
     if dates:
-        task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], timeout, bands)
+        task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands)
                     for i in range(len(files))]
     else:
-        task_ids = [ingestAsset(gs_uris[i], assets[i], '', timeout, bands)
+        task_ids = [ingestAsset(gs_uris[i], assets[i], '', 0, bands)
                     for i in range(len(files))]
     try:
         waitForTasks(task_ids, timeout)
