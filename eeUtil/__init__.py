@@ -258,7 +258,7 @@ def formatDate(date):
     return int(seconds * 1000)
 
 
-def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands={}):
+def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands=[]):
     '''
     Upload asset from GS to EE
 
@@ -268,14 +268,16 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands={}):
     `wait_timeout` if non-zero, wait timeout secs for task completion
     `bands`        optional band name dictionary
     '''
-    task_id = ee.data.newTaskId()[0]
     params = {'id': _path(asset),
               'tilesets': [{'sources': [{'primaryPath': gs_uri}]}]}
     if date:
         params['properties'] = {'system:time_start': formatDate(date),
                                 'system:time_end': formatDate(date)}
     if bands:
+        if isinstance(bands[0], str):
+            bands = [{'id': b} for b in bands]
         params['bands'] = bands
+    task_id = ee.data.newTaskId()[0]
     logging.debug('Ingesting {} to {}: {}'.format(gs_uri, asset, task_id))
     ee.data.startIngestion(task_id, params, True)
     if wait_timeout:
@@ -284,7 +286,7 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands={}):
 
 
 def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
-                timeout=300, clean=True, bands={}):
+                timeout=300, clean=True, bands=[]):
     '''
     Stage file to GS and ingest to EE
 
@@ -308,7 +310,7 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
 
 
 def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
-                 timeout=300, clean=True, bands={}):
+                 timeout=300, clean=True, bands=[]):
     '''
     Stage files to GS and ingest to EE
 
