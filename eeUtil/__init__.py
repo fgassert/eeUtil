@@ -168,6 +168,7 @@ def setAcl(asset, acl={}, overwrite=False):
     `overwrite` If false, only change specified values
     '''
     _acl = {} if overwrite else getAcl(asset)
+    _acl.pop('owners', None)
     if acl == 'public':
         _acl["all_users_can_read"] = True
     elif acl == 'private':
