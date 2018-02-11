@@ -45,7 +45,7 @@ eeUtil defaults to reading from credentials saved by `gcloud auth` for Google Cl
 # environment variables
 export GEE_SERVICE_ACCOUNT=<my-account@gmail.com>
 export GOOGLE_APPLICATION_CREDENTIALS=<path/to/credentials.json>
-export GCS_PROJECT=<my-project>
+export CLOUDSDK_CORE_PROJECT=<my-project>
 export GEE_STAGING_BUCKET=<my-bucket>
 ```
 
@@ -54,10 +54,10 @@ Alternatively credentials can be provided directly to `eeUtil.init()` via a json
 ```
 eeUtil.init([service_account=], [credential_path=], [project=], [bucket=])
 ```
- - `service_account` Service account name. If not specficed, reads defaulds from `earthengine authenticate`. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account [default: `GEE_SERVICE_ACCOUNT`]
- - `credential_path` Path to json file containing private key. Required for service accounts. [default: `GOOGLE_APPLICATION_CREDENTIALS`]
- - `project` GCS project containing bucket. Required if account has access to multiple projects. [default: `GCS_PROJECT`]
- - `bucket` Storage bucket for staging assets for ingestion. Will create new bucket if none provided. [default: `GEE_STAGING_BUCKET`]
+ - `service_account` Service account name. If not specficed, reads defaulds from `earthengine authenticate`. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account `[default: GEE_SERVICE_ACCOUNT]`
+ - `credential_path` Path to json file containing private key. Required for service accounts. `[default: GOOGLE_APPLICATION_CREDENTIALS]`
+ - `project` GCS project containing bucket. Required if account has access to multiple projects. `[default: CLOUDSDK_CORE_PROJECT]`
+ - `bucket` Storage bucket for staging assets for ingestion. Will create new bucket if none provided. `[default: GEE_STAGING_BUCKET]`
 
 
 

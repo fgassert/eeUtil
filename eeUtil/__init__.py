@@ -38,8 +38,7 @@ _CREDENTIAL_FILE = 'credentials.json'
 GEE_SERVICE_ACCOUNT = os.environ.get("GEE_SERVICE_ACCOUNT")
 GOOGLE_APPLICATION_CREDENTIALS = os.environ.get(
     "GOOGLE_APPLICATION_CREDENTIALS")
-
-GCS_PROJECT = os.environ.get("CLOUDSDK_CORE_PROJECT")
+CLOUDSDK_CORE_PROJECT = os.environ.get("CLOUDSDK_CORE_PROJECT")
 GEE_STAGING_BUCKET = os.environ.get("GEE_STAGING_BUCKET")
 
 
@@ -51,7 +50,7 @@ _home = ''
 
 def init(service_account=GEE_SERVICE_ACCOUNT,
          credential_path=GOOGLE_APPLICATION_CREDENTIALS,
-         project=GCS_PROJECT, bucket=GEE_STAGING_BUCKET):
+         project=CLOUDSDK_CORE_PROJECT, bucket=GEE_STAGING_BUCKET):
     '''
     Initialize Earth Engine and Google Storage bucket connection.
 
@@ -89,7 +88,7 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
         _gsBucket.create()
 
 
-def initJson(credential_json=GEE_JSON, project=GCS_PROJECT,
+def initJson(credential_json=GEE_JSON, project=CLOUDSDK_CORE_PROJECT,
              bucket=GEE_STAGING_BUCKET):
     '''
     Writes json string to credential file and initializes
