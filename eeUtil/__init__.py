@@ -196,7 +196,7 @@ def createFolder(path, imageCollection=False, overwrite=False,
 
 
 def _checkTaskCompleted(task_id):
-    '''Return status of task if completed else False'''
+    '''Return True if task completed else False'''
     status = ee.data.getTaskStatus(task_id)[0]
     if status['state'] in (ee.batch.Task.State.CANCELLED,
                            ee.batch.Task.State.FAILED):
@@ -205,9 +205,9 @@ def _checkTaskCompleted(task_id):
         if STRICT:
             raise Exception(status)
         logging.error('Task ended with state {}'.format(status['state']))
-        return status['state']
+        return False
     elif status['state'] == ee.batch.Task.State.COMPLETED:
-        return status['state']
+        return True
     return False
 
 
@@ -217,8 +217,8 @@ def waitForTasks(task_ids, timeout=300):
     elapsed = 0
     while elapsed < timeout:
         elapsed = time.time() - start
-        state = [_checkTaskCompleted(task) for task in task_ids]
-        if all(state):
+        finished = [_checkTaskCompleted(task) for task in task_ids]
+        if all(finished):
             return True
         time.sleep(5)
     logging.error('Tasks timed out after {} seconds'.format(timeout))
@@ -233,11 +233,9 @@ def waitForTask(task_id, timeout=300):
     elapsed = 0
     while elapsed < timeout:
         elapsed = time.time() - start
-        state = _checkTaskCompleted(task_id)
-        if state == ee.batch.Task.State.COMPLETED:
+        finished = _checkTaskCompleted(task_id)
+        if finished:
             return True
-        elif state:
-            return False
         time.sleep(5)
     logging.error('Task timed out after {} seconds'.format(timeout))
     if STRICT:
