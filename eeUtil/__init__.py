@@ -16,41 +16,39 @@ eeUtil.init()
 eeUtil.createFolder('mycollection', imageCollection=True)
 
 # upload image to collection
-eeUtil.upload('image.tif', 'mycollection/myasset')
+eeUtil.uploadAsset('image.tif', 'mycollection/myasset')
 eeUtil.setAcl('mycollection', 'public')
 eeUtil.ls('mycollection')
+
+# export from earthengine to storage and download
+eeUtil.downloadAsset('mycollection/myasset', 'image.tif')
 ```
 '''
-from __future__ import unicode_literals
 import os
 import ee
 import logging
 import time
 import datetime
 import json
-from google.cloud import storage
+
+from . import gsbucket
 
 STRICT = True
 
-GEE_JSON = os.environ.get("GEE_JSON")
-_CREDENTIAL_FILE = 'credentials.json'
+GEE_JSON = os.getenv("GEE_JSON")
+GEE_SERVICE_ACCOUNT = os.getenv("GEE_SERVICE_ACCOUNT")
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+GEE_PROJECT = os.getenv("GEE_PROJECT")
+GEE_STAGING_BUCKET = os.getenv("GEE_STAGING_BUCKET")
 
-GEE_SERVICE_ACCOUNT = os.environ.get("GEE_SERVICE_ACCOUNT")
-GOOGLE_APPLICATION_CREDENTIALS = os.environ.get(
-    "GOOGLE_APPLICATION_CREDENTIALS")
-CLOUDSDK_CORE_PROJECT = os.environ.get("CLOUDSDK_CORE_PROJECT")
-GEE_STAGING_BUCKET = os.environ.get("GEE_STAGING_BUCKET")
-
-
-# Unary bucket object
-_gsBucket = None
 # Unary GEE home directory
 _home = ''
 
 
 def init(service_account=GEE_SERVICE_ACCOUNT,
          credential_path=GOOGLE_APPLICATION_CREDENTIALS,
-         project=CLOUDSDK_CORE_PROJECT, bucket=GEE_STAGING_BUCKET):
+         project=GEE_PROJECT, bucket=GEE_STAGING_BUCKET, 
+         credential_json=GEE_JSON):
     '''
     Initialize Earth Engine and Google Storage bucket connection.
 
@@ -62,53 +60,50 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
     `service_account` Service account name. Will need access to both GEE and
                       Storage
     `credential_path` Path to json file containing private key
-    `project`         GCS project containing bucket
+    `project`         GCP project for earthengine and storage bucket
     `bucket`          Storage bucket for staging assets for ingestion
 
     https://developers.google.com/earth-engine/service_account
     '''
-    global _gsBucket
-
-    # EE and GCS auth out of sync
-    if service_account:
-        auth = ee.ServiceAccountCredentials(service_account, credential_path)
-        ee.Initialize(auth)
-    else:
-        ee.Initialize()
-    # GCS auth prefers to read json files from environment
+    init_opts = {}
+    if service_account or credential_json:
+        if credential_json:
+            init_opts['credentials'] = ee.ServiceAccountCredentials(service_account, key_data=credential_json)
+        elif credential_path:
+            init_opts['credentials'] = ee.ServiceAccountCredentials(service_account, key_file=credential_path)
+    if project:
+        init_opts['project'] = project
+    ee.Initialize(**init_opts)
     if credential_path:
         os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
-    if not bucket:
-        bucket = _getDefaultBucket()
-        logging.warning('No bucket provided, using default {}'.format(bucket))
-    gsClient = storage.Client(project) if project else storage.Client()
-    _gsBucket = gsClient.bucket(bucket)
-    if not _gsBucket.exists():
-        logging.info('Bucket {} does not exist, creating'.format(bucket))
-        _gsBucket.create()
+    try:
+        gsbucket.init(bucket, **init_opts)
+    except Exception as e:
+        logging.warning("Could not initialize Google Cloud Storage Bucket.")
+        logging.error(e)
 
 
-def initJson(credential_json=GEE_JSON, project=CLOUDSDK_CORE_PROJECT,
+def initJson(credential_json=GEE_JSON, project=GEE_PROJECT,
              bucket=GEE_STAGING_BUCKET):
     '''
     Writes json string to credential file and initializes
 
     Defaults from GEE_JSON env variable
     '''
-    with open(_CREDENTIAL_FILE, 'w') as f:
-        f.write(credential_json)
-    init('service_account', _CREDENTIAL_FILE, project, bucket)
-
-
-def _getDefaultBucket():
-    '''Generate new bucket name'''
-    return 'eeUtil_{}'.format(hash(getHome()))
+    init('service_account', None, project, bucket, credential_json)
 
 
 def getHome():
     '''Get user root directory'''
     global _home
-    _home = ee.data.getAssetRoots()[0]['id']
+    assetRoots = ee.data.getAssetRoots()
+    project = ee._cloud_api_utils._cloud_api_user_project
+    if project == 'earthengine-legacy':
+        if not len(assetRoots):
+            raise Exception(f"No available assets for provided credentials in project {project}")
+        _home = assetRoots[0]['id']
+    else:
+        _home = f'projects/{project}/assets/'
     return _home
 
 
@@ -119,11 +114,13 @@ def _getHome():
 
 
 def _path(path):
-    '''Add user root directory to path if not already existing'''
+    '''Add asset root directory to path if not already existing'''
     if path:
         if path[0] == '/':
             return path[1:]
         elif len(path) > 6 and path[:6] == 'users/':
+            return path
+        elif len(path) > 9 and path[:9] == 'projects/':
             return path
         else:
             return os.path.join(_getHome(), path)
@@ -173,8 +170,7 @@ def setAcl(asset, acl={}, overwrite=False):
     elif acl == 'private':
         _acl["all_users_can_read"] = False
     else:
-        for key in acl:
-            _acl[key] = acl[key]
+        _acl.update(acl)
     acl = json.dumps(_acl)
     logging.debug('Setting ACL to {} on {}'.format(acl, asset))
     ee.data.setAssetAcl(_path(asset), acl)
@@ -195,6 +191,11 @@ def createFolder(path, imageCollection=False, overwrite=False,
         setAcl(_path(path), 'public')
 
 
+def createImageCollection(path, overwrite=False, public=False):
+    '''Create image collection'''
+    createFolder(path, True, overwrite, public)
+
+
 def _checkTaskCompleted(task_id):
     '''Return True if task completed else False'''
     status = ee.data.getTaskStatus(task_id)[0]
@@ -211,7 +212,7 @@ def _checkTaskCompleted(task_id):
     return False
 
 
-def waitForTasks(task_ids, timeout=300):
+def waitForTasks(task_ids, timeout=3600):
     '''Wait for tasks to complete, fail, or timeout'''
     start = time.time()
     elapsed = 0
@@ -227,7 +228,7 @@ def waitForTasks(task_ids, timeout=300):
     return False
 
 
-def waitForTask(task_id, timeout=300):
+def waitForTask(task_id, timeout=3600):
     '''Wait for task to complete, fail, or timeout'''
     start = time.time()
     elapsed = 0
@@ -243,9 +244,16 @@ def waitForTask(task_id, timeout=300):
     return False
 
 
-def copy(src, dest):
+def copy(src, dest, allowOverwrite=False):
     '''Copy asset'''
-    return ee.data.copyAsset(_path(src), _path(dest))
+    return ee.data.copyAsset(_path(src), _path(dest), allowOverwrite)
+
+
+def move(src, dest, allowOverwrite=False):
+    '''Move asset'''
+    src = _path(src)
+    copy(src, _path(dest), allowOverwrite)
+    removeAsset(src)
 
 
 def formatDate(date):
@@ -296,7 +304,7 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
     `timeout`      wait timeout secs for completion of GEE ingestion
     `clean`        delete files from GS after completion
     '''
-    gs_uris = gsStage(filename, gs_prefix)
+    gs_uris = _gsStage(filename, gs_prefix)
     try:
         ingestAsset(gs_uris[0], asset, date, timeout, bands)
         if public:
@@ -304,8 +312,10 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
     except Exception as e:
         logging.error(e)
     if clean:
-        gsRemove(gs_uris)
+        gsbucket.remove(gs_uris)
 
+# ALIAS
+upload = uploadAsset
 
 def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
                  timeout=300, clean=True, bands=[]):
@@ -320,7 +330,7 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     `timeout`      wait timeout secs for completion of GEE ingestion
     `clean`        delete files from GS after completion
     '''
-    gs_uris = gsStage(files, gs_prefix)
+    gs_uris = _gsStage(files, gs_prefix)
     if dates:
         task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands)
                     for i in range(len(files))]
@@ -335,7 +345,7 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     except Exception as e:
         logging.error(e)
     if clean:
-        gsRemove(gs_uris)
+        gsbucket.remove(gs_uris)
     return assets
 
 
@@ -350,36 +360,82 @@ def removeAsset(asset, recursive=False):
     ee.data.deleteAsset(_path(asset))
 
 
-def gsStage(files, prefix=''):
-    '''Upload files to GS with prefix'''
-    files = (files,) if isinstance(files, str) else files
-    if not _gsBucket:
-        raise Exception('GS Bucket not initialized, run init()')
-    gs_uris = []
-    for f in files:
-        path = os.path.join(prefix, os.path.basename(f))
-        uri = 'gs://{}/{}'.format(_gsBucket.name, path)
-        logging.debug('Uploading {} to {}'.format(f, uri))
-        _gsBucket.blob(path).upload_from_filename(f)
-        gs_uris.append(uri)
-    return gs_uris
-
-
-def gsRemove(gs_uris):
+def downloadAsset(asset, filename=None, gs_prefix='', timeout=3600, clean=True, **kwargs):
+    '''Export image asset to GS and download to local machine
+    
+    `asset`     Asset ID
+    `filename`  Optional filename for export otherwise defaults to Asset ID
+    `gs_prefix` GS folder for staging (else files are staged to bucket root)
+    `timeout`   Wait timeout secs for export task completion
+    `clean`     Remove file from GS after download
+    `kwargs`    Additional args to pass to ee.batch.Export.image.toCloudStorage()
     '''
-    Remove blobs from GS
+    if filename is None:
+        filename = os.path.basename(asset)
+    else:
+        # .tif is automatically appended...
+        filename = os.path.splitext(filename)[0]
+    image = ee.Image(asset)
+    path = os.path.join(gs_prefix, filename)
+    task = ee.batch.Export.image.toCloudStorage(
+        image,
+        bucket=gsbucket.getName(),
+        fileNamePrefix=path,
+        **kwargs
+    )
+    task.start()
 
-    `gs_uris` must be full paths `gs://<bucket>/<blob>`
+    uri = f"{gsbucket.asURI(path)}.tif"
+    logging.debug(f"Exporting asset {asset} to {uri}")
+
+    try:
+        waitForTask(task.id, timeout)
+        gsbucket.download(uri, filename)
+        if clean:
+            gsbucket.remove(uri)
+    except Exception as e:
+        logging.error(e)
+
+
+# ALIAS
+download = downloadAsset
+
+
+def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
+    '''Export image assets to GS and download to local machine
+    
+    `asset`     Asset ID
+    `gs_prefix` GS folder for staging (else files are staged to bucket root)
+    `timeout`   Wait timeout secs for export task completion
+    `clean`     Remove file from GS after download
+    `kwargs`    Additional args to pass to ee.batch.Export.image.toCloudStorage()
     '''
-    if not _gsBucket:
-        raise Exception('GS Bucket not initialized, run init()')
-    paths = []
-    for path in gs_uris:
-        if path[:len(_gsBucket.name) + 5] == 'gs://{}'.format(_gsBucket.name):
-            paths.append(path[6+len(_gsBucket.name):])
-        else:
-            raise Exception('Path {} does not match gs://{}/<blob>'.format(
-                path, _gsBucket.name))
-    # on_error null function to ignore NotFound
-    logging.debug("Deleting {} from gs://{}".format(paths, _gsBucket.name))
-    _gsBucket.delete_blobs(paths, lambda x:x)
+    task_ids = []
+    uris = []
+    for asset in assets:
+        image = ee.Image(asset)
+        path = os.path.join(gs_prefix, os.path.basename(asset))
+        
+        task = ee.batch.Export.image.toCloudStorage(
+            image,
+            bucket=gsbucket.getName(),
+            fileNamePrefix=path,
+            **kwargs
+        )
+        task.start()
+        task_ids.append(task.id)
+
+        uri = f'{gsbucket.asURI(path)}.tif'
+        uris.append(uri)
+        
+        logging.debug(f"Exporting asset {asset} to {uri}")    
+
+    try:
+        waitForTasks(task_ids, timeout)
+        for uri in uris:
+            gsbucket.download(uri)
+            if clean:
+                gsbucket.remove(uri)
+    except Exception as e:
+        logging.error(e)
+
