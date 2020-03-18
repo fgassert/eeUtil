@@ -1,7 +1,8 @@
 import os
 from google.cloud import storage
+import logging
 
-from . import getHome
+from . import eeutil
 
 # Unary bucket object
 _gsBucket = None
@@ -21,7 +22,7 @@ def init(bucket=None, project=None, credentials=None):
 
 def _getDefaultBucket():
     '''Generate new bucket name'''
-    return 'eeutil-{}'.format(hash(getHome()))
+    return 'eeutil-{}'.format(hash(eeutil.getHome()))
 
 
 def getName():
