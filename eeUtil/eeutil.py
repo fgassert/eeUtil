@@ -219,8 +219,9 @@ def copy(src, dest, allowOverwrite=False, recursive=False):
     src_type = info(src)['type']
     if recursive and src_type in (ee.data.ASSET_TYPE_FOLDER,
                                   ee.data.ASSET_TYPE_IMAGE_COLL):
+        children = ls(src)
         createFolder(dest, (src_type == ee.data.ASSET_TYPE_IMAGE_COLL))
-        for child in ls(src):
+        for child in children:
             copy(os.path.join(src, child), os.path.join(dest, child), allowOverwrite, recursive)
     else:
         ee.data.copyAsset(_path(src), _path(dest), allowOverwrite)
@@ -331,7 +332,7 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
 
     gs_uris = gsbucket.stage(files, gs_prefix)
     if not dates:
-        dates = ['' for i in len(assets)]
+        dates = ['' for i in range(len(assets))]
     
     task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands)
                 for i in range(len(files))]
