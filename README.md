@@ -37,33 +37,38 @@ pip install -e .
 ### Nice things?
 
 - More consistent python bindings
-- GEE paths not starting with `/` or `users/` are relative to your user root folder (`users/<username>`)
+- Adds operations for recursive `copy`, `move`, `remove`.
+- GEE paths not starting with `/` or `users/` are relative to your user root folder (`users/<username>` or `projects/<project-id>/assets`)
 - Upload atomatically stages files via Google Cloud Storage
 
 ### Usage
 
-eeUtil defaults to reading from credentials saved by `gcloud auth application-default login` for Google Cloud Storage and `earthengine authenticate` for Earth Engine. In your script, initialize these credentials with `eeUtil.init()`. These credentials are read from environment variables as follows.
+The easiest way to authorize eeUtil is using [service account credentials](https://developers.google.com/earth-engine/service_account). Once you create a service account and download your `credentials.json` set these in your environment.
 
 ```
-# environment variables
-export GEE_SERVICE_ACCOUNT=<my-account@gmail.com>
-export GOOGLE_APPLICATION_CREDENTIALS=<path/to/credentials.json>
-export GEE_PROJECT=<my-project>
-export GEE_STAGING_BUCKET=<my-bucket>
+export GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
 ```
 
-Alternatively credentials can be provided directly to `eeUtil.init()` via a json credential file or via a json string in the `GEE_JSON` environment variable.
+Initalize these credentials by calling `eeUtil.init()`.
 
 ```
-eeUtil.init([service_account=], [credential_path=], [project=], [bucket=], [credential_json=])
+eeUtil.init()
 ```
 
- - `service_account` Service account name. If not specficed, reads defaulds from `earthengine authenticate`. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account `[default: GEE_SERVICE_ACCOUNT]`
- - `credential_path` Path to json file containing private key. This or
-   `credential_json` is required for service accounts. `[default: GOOGLE_APPLICATION_CREDENTIALS]`
- - `project` Project to use for GEE and GS bucket. `[default: GEE_PROJECT]`
+If you don't provide credentials to eeUtil.init(), it defaults to reading from credentials from the environment, and attempts to read credentials as saved by `earthengine authenticate` for Earth Engine and `gcloud auth application-default login` for Google Cloud Storage. 
+
+```
+eeUtil.init(service_account=GEE_SERVICE_ACCOUNT, 
+            credential_path=GOOGLE_APPLICATION_CREDENTIALS, 
+            project=GEE_PROJECT, 
+            bucket=GEE_STAGING_BUCKET, 
+            credential_json=GEE_JSON)
+```
+
+ - `service_account` Service account name. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account `[default: GEE_SERVICE_ACCOUNT]`
+ - `credential_path` Path to json file containing private key. This or `credential_json` is required for service accounts. `[default: GOOGLE_APPLICATION_CREDENTIALS]`
+ - `project` Project to use for GEE and GS bucket. `[default: GEE_PROJECT or CLOUDSDK_CORE_PROJECT]`
  - `bucket` Storage bucket for staging assets for ingestion. Will create new bucket if none provided. `[default: GEE_STAGING_BUCKET]`
- - `credential_json` Pass json string as alternative to `credential_path`.
-   `[default: GEE_JSON]`
+ - `credential_json` Pass json string as alternative to `credential_path`. `[default: GEE_JSON]`
 
 

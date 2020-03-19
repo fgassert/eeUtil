@@ -10,9 +10,9 @@ from . import gsbucket
 STRICT = True
 
 GEE_JSON = os.getenv("GEE_JSON")
-GEE_SERVICE_ACCOUNT = os.getenv("GEE_SERVICE_ACCOUNT")
+GEE_SERVICE_ACCOUNT = os.getenv("GEE_SERVICE_ACCOUNT") or "service account"
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-GEE_PROJECT = os.getenv("GEE_PROJECT")
+GEE_PROJECT = os.getenv("GEE_PROJECT") or os.getenv("CLOUDSDK_CORE_PROJECT")
 GEE_STAGING_BUCKET = os.getenv("GEE_STAGING_BUCKET")
 
 # Unary GEE home directory
@@ -28,23 +28,24 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
 
     Defaults to read from environment.
 
-    If no service_account is provided, will use default credentials from
-    `earthengine authenticate` utility.
+    If no service_account is provided, will attempt to use credentials saved by
+    `earthengine authenticate`, and `gcloud auth application-default login`
+    utilities.
 
     `service_account` Service account name. Will need access to both GEE and
                       Storage
     `credential_path` Path to json file containing private key
     `project`         GCP project for earthengine and storage bucket
     `bucket`          Storage bucket for staging assets for ingestion
+    `credential_json` Json-string to use instead of `credential_path`
 
     https://developers.google.com/earth-engine/service_account
     '''
     init_opts = {}
-    if service_account or credential_json:
-        if credential_json:
-            init_opts['credentials'] = ee.ServiceAccountCredentials(service_account, key_data=credential_json)
-        elif credential_path:
-            init_opts['credentials'] = ee.ServiceAccountCredentials(service_account, key_file=credential_path)
+    if credential_json:
+        init_opts['credentials'] = ee.ServiceAccountCredentials(service_account, key_data=credential_json)
+    elif credential_path:
+        init_opts['credentials'] = ee.ServiceAccountCredentials(service_account, key_file=credential_path)
     if project:
         init_opts['project'] = project
     ee.Initialize(**init_opts)
@@ -179,7 +180,7 @@ def _checkTaskCompleted(task_id):
             logging.error(status['error_message'])
         if STRICT:
             raise Exception(status)
-        logging.error(f'Task {status['id']} ended with state {status['state']}')
+        logging.error(f"Task {status['id']} ended with state {status['state']}")
         return True
     elif status['state'] == ee.batch.Task.State.COMPLETED:
         return True
@@ -205,19 +206,7 @@ def waitForTasks(task_ids, timeout=3600):
 
 def waitForTask(task_id, timeout=3600):
     '''Wait for task to complete, fail, or timeout'''
-    start = time.time()
-    elapsed = 0
-    while elapsed < timeout:
-        elapsed = time.time() - start
-        finished = _checkTaskCompleted(task_id)
-        if finished:
-            logging.debug(f'Task {task_id} completed after {elapsed}s')
-            return True
-        time.sleep(5)
-    logging.error(f'Stopped waiting for task after {timeout} seconds')
-    if STRICT:
-        raise Exception(task_id)
-    return False
+    return waitForTasks([task_id], timeout)
 
 
 def getTasks():
@@ -225,16 +214,37 @@ def getTasks():
     return ee.data.getTaskList()
 
 
-def copy(src, dest, allowOverwrite=False):
+def copy(src, dest, allowOverwrite=False, recursive=False):
     '''Copy asset'''
-    return ee.data.copyAsset(_path(src), _path(dest), allowOverwrite)
+    src_type = info(src)['type']
+    if recursive and src_type in (ee.data.ASSET_TYPE_FOLDER,
+                                  ee.data.ASSET_TYPE_IMAGE_COLL):
+        createFolder(dest, (src_type == ee.data.ASSET_TYPE_IMAGE_COLL))
+        for child in ls(src):
+            copy(os.path.join(src, child), os.path.join(dest, child), allowOverwrite, recursive)
+    else:
+        ee.data.copyAsset(_path(src), _path(dest), allowOverwrite)
 
 
-def move(src, dest, allowOverwrite=False):
+def move(src, dest, allowOverwrite=False, recursive=False):
     '''Move asset'''
     src = _path(src)
-    copy(src, _path(dest), allowOverwrite)
-    removeAsset(src)
+    copy(src, _path(dest), allowOverwrite, recursive=False)
+    removeAsset(src, recursive)
+
+
+def removeAsset(asset, recursive=False):
+    '''Delete asset from GEE'''
+    if recursive:
+        if info(asset)['type'] in (ee.data.ASSET_TYPE_FOLDER,
+                                   ee.data.ASSET_TYPE_IMAGE_COLL):
+            for child in ls(asset, abspath=True):
+                removeAsset(child)
+    logging.debug('Deleting asset {}'.format(asset))
+    ee.data.deleteAsset(_path(asset))
+
+#alias
+remove = removeAsset
 
 
 def formatDate(date):
@@ -266,7 +276,7 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands=[]):
         params['bands'] = bands
     request_id = ee.data.newTaskId()[0]
     task = ee.data.startIngestion(request_id, params, True)
-    logging.debug(f'Ingesting {gs_uri} to {asset}: {task['id']}')
+    logging.debug(f"Ingesting {gs_uri} to {asset}: {task['id']}")
     if wait_timeout:
         waitForTask(task_id, wait_timeout)
     
@@ -340,17 +350,6 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     return assets
 
 
-def removeAsset(asset, recursive=False):
-    '''Delete asset from GEE'''
-    if recursive:
-        if info(asset)['type'] in (ee.data.ASSET_TYPE_FOLDER,
-                                   ee.data.ASSET_TYPE_IMAGE_COLL):
-            for child in ls(asset, abspath=True):
-                removeAsset(child)
-    logging.debug('Deleting asset {}'.format(asset))
-    ee.data.deleteAsset(_path(asset))
-
-
 def downloadAsset(asset, filename=None, gs_prefix='', timeout=3600, clean=True, **kwargs):
     '''Export image asset to GS and download to local machine
 
@@ -387,6 +386,8 @@ def downloadAsset(asset, filename=None, gs_prefix='', timeout=3600, clean=True, 
             gsbucket.remove(uri)
     except Exception as e:
         logging.error(e)
+    
+    return filename
 
 
 # ALIAS
@@ -422,6 +423,8 @@ def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
 
         logging.debug(f"Exporting asset {asset} to {uri}")
 
+    filenames = []
+
     try:
         waitForTasks(task_ids, timeout)
         for uri in uris:
@@ -430,3 +433,5 @@ def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
                 gsbucket.remove(uri)
     except Exception as e:
         logging.error(e)
+
+    return filenames

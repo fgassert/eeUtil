@@ -61,7 +61,7 @@ def stage(files, prefix=''):
     files = (files,) if isinstance(files, str) else files
     gs_uris = []
     for f in files:
-        path = os.path.join(prefix, f)
+        path = os.path.join(prefix, os.path.basename(f))
         uri = asURI(path)
         logging.debug(f'Uploading {f} to {uri}')
         _gsBucket.blob(path).upload_from_filename(f)
@@ -82,9 +82,9 @@ def remove(gs_uris):
     paths = []
     for uri in gs_uris:
         paths.append(pathFromURI(uri))
-            
+
+    logging.debug(f"Deleting {paths} from gs://{getName()}")    
     # on_error null function to ignore NotFound
-    logging.debug(f"Deleting {paths} from gs://{getName()}")
     _gsBucket.delete_blobs(paths, lambda x:x)
 
 
