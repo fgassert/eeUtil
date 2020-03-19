@@ -179,8 +179,8 @@ def _checkTaskCompleted(task_id):
             logging.error(status['error_message'])
         if STRICT:
             raise Exception(status)
-        logging.error('Task ended with state {}'.format(status['state']))
-        return False
+        logging.error(f'Task {status['id']} ended with state {status['state']}')
+        return True
     elif status['state'] == ee.batch.Task.State.COMPLETED:
         return True
     return False
@@ -194,9 +194,10 @@ def waitForTasks(task_ids, timeout=3600):
         elapsed = time.time() - start
         finished = [_checkTaskCompleted(task) for task in task_ids]
         if all(finished):
+            logging.debug(f'Tasks {task_ids} completed after {elapsed}s')
             return True
         time.sleep(5)
-    logging.error('Tasks timed out after {} seconds'.format(timeout))
+    logging.error(f'Stopped waiting for tasks after {timeout} seconds')
     if STRICT:
         raise Exception(task_ids)
     return False
@@ -210,12 +211,18 @@ def waitForTask(task_id, timeout=3600):
         elapsed = time.time() - start
         finished = _checkTaskCompleted(task_id)
         if finished:
+            logging.debug(f'Task {task_id} completed after {elapsed}s')
             return True
         time.sleep(5)
-    logging.error('Task timed out after {} seconds'.format(timeout))
+    logging.error(f'Stopped waiting for task after {timeout} seconds')
     if STRICT:
         raise Exception(task_id)
     return False
+
+
+def getTasks():
+    '''Return a list of all recent tasks'''
+    return ee.data.getTaskList()
 
 
 def copy(src, dest, allowOverwrite=False):
@@ -252,21 +259,22 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands=[]):
               'tilesets': [{'sources': [{'primaryPath': gs_uri}]}]}
     if date:
         params['properties'] = {'system:time_start': formatDate(date),
-                                'system:time_end': formatDate(date)}
+                                'system:time_end': formatDate(date)},
     if bands:
         if isinstance(bands[0], str):
             bands = [{'id': b} for b in bands]
         params['bands'] = bands
-    task_id = ee.data.newTaskId()[0]
-    logging.debug('Ingesting {} to {}: {}'.format(gs_uri, asset, task_id))
-    ee.data.startIngestion(task_id, params, True)
+    request_id = ee.data.newTaskId()[0]
+    task = ee.data.startIngestion(request_id, params, True)
+    logging.debug(f'Ingesting {gs_uri} to {asset}: {task['id']}')
     if wait_timeout:
         waitForTask(task_id, wait_timeout)
-    return task_id
+    
+    return task['id']
 
 
 def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
-                timeout=300, clean=True, bands=[]):
+                timeout=3600, clean=True, bands=[]):
     '''
     Stage file to GS and ingest to EE
 
@@ -287,12 +295,14 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
         logging.error(e)
     if clean:
         gsbucket.remove(gs_uris)
+    
+    return asset
 
 # ALIAS
 upload = uploadAsset
 
 def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
-                 timeout=300, clean=True, bands=[]):
+                 timeout=3600, clean=True, bands=[]):
     '''
     Stage files to GS and ingest to EE
 
@@ -304,13 +314,18 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     `timeout`      wait timeout secs for completion of GEE ingestion
     `clean`        delete files from GS after completion
     '''
+    if len(assets) != len(files):
+        raise Exception(f"Files and assets must be of same length. Found {len(files)}, {len(assets)}")
+    if len(dates) and len(dates) != len(assets):
+        raise Exception(f"Must have one date per asset if dates specified. Found {len(dates)}, {len(assets)}")
+
     gs_uris = gsbucket.stage(files, gs_prefix)
-    if dates:
-        task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands)
-                    for i in range(len(files))]
-    else:
-        task_ids = [ingestAsset(gs_uris[i], assets[i], '', 0, bands)
-                    for i in range(len(files))]
+    if not dates:
+        dates = ['' for i in len(assets)]
+    
+    task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands)
+                for i in range(len(files))]
+    
     try:
         waitForTasks(task_ids, timeout)
         if public:
@@ -318,8 +333,10 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
                 setAcl(asset, 'public')
     except Exception as e:
         logging.error(e)
+    
     if clean:
         gsbucket.remove(gs_uris)
+    
     return assets
 
 
@@ -349,6 +366,7 @@ def downloadAsset(asset, filename=None, gs_prefix='', timeout=3600, clean=True, 
     else:
         # .tif is automatically appended...
         filename = os.path.splitext(filename)[0]
+    
     image = ee.Image(asset)
     path = os.path.join(gs_prefix, filename)
     task = ee.batch.Export.image.toCloudStorage(
