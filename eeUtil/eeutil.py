@@ -1,4 +1,3 @@
-
 import os
 import ee
 import logging
@@ -22,7 +21,7 @@ _home = ''
 
 def init(service_account=GEE_SERVICE_ACCOUNT,
          credential_path=GOOGLE_APPLICATION_CREDENTIALS,
-         project=GEE_PROJECT, bucket=GEE_STAGING_BUCKET, 
+         project=GEE_PROJECT, bucket=GEE_STAGING_BUCKET,
          credential_json=GEE_JSON):
     '''
     Initialize Earth Engine and Google Storage bucket connection.
@@ -279,7 +278,7 @@ def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
     `timeout`      wait timeout secs for completion of GEE ingestion
     `clean`        delete files from GS after completion
     '''
-    gs_uris = _gsStage(filename, gs_prefix)
+    gs_uris = gsbucket.stage(filename, gs_prefix)
     try:
         ingestAsset(gs_uris[0], asset, date, timeout, bands)
         if public:
@@ -305,7 +304,7 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     `timeout`      wait timeout secs for completion of GEE ingestion
     `clean`        delete files from GS after completion
     '''
-    gs_uris = _gsStage(files, gs_prefix)
+    gs_uris = gsbucket.stage(files, gs_prefix)
     if dates:
         task_ids = [ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands)
                     for i in range(len(files))]
@@ -337,7 +336,7 @@ def removeAsset(asset, recursive=False):
 
 def downloadAsset(asset, filename=None, gs_prefix='', timeout=3600, clean=True, **kwargs):
     '''Export image asset to GS and download to local machine
-    
+
     `asset`     Asset ID
     `filename`  Optional filename for export otherwise defaults to Asset ID
     `gs_prefix` GS folder for staging (else files are staged to bucket root)
@@ -378,7 +377,7 @@ download = downloadAsset
 
 def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
     '''Export image assets to GS and download to local machine
-    
+
     `asset`     Asset ID
     `gs_prefix` GS folder for staging (else files are staged to bucket root)
     `timeout`   Wait timeout secs for export task completion
@@ -390,7 +389,7 @@ def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
     for asset in assets:
         image = ee.Image(asset)
         path = os.path.join(gs_prefix, os.path.basename(asset))
-        
+
         task = ee.batch.Export.image.toCloudStorage(
             image,
             bucket=gsbucket.getName(),
@@ -402,8 +401,8 @@ def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
 
         uri = f'{gsbucket.asURI(path)}.tif'
         uris.append(uri)
-        
-        logging.debug(f"Exporting asset {asset} to {uri}")    
+
+        logging.debug(f"Exporting asset {asset} to {uri}")
 
     try:
         waitForTasks(task_ids, timeout)
@@ -413,4 +412,3 @@ def downloadAssets(assets, gs_prefix='', clean=True, timeout=3600, **kwargs):
                 gsbucket.remove(uri)
     except Exception as e:
         logging.error(e)
-
