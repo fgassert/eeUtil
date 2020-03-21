@@ -10,6 +10,7 @@ _gsBucket = None
 def init(bucket=None, project=None, credentials=None):
     '''Initalize google cloud storage bucket'''
     global _gsBucket
+    global _gsBucketPrefix
     if not bucket:
         bucket = _getDefaultBucket()
         logging.warning('No bucket provided, attempting to use default {}'.format(bucket))
@@ -88,18 +89,23 @@ def remove(gs_uris):
     _gsBucket.delete_blobs(paths, lambda x:x)
 
 
-def download(gs_uri, filename=None):
+def download(gs_uri, filename=None, directory=None):
     '''
     Download blob from GS
 
     `gs_uri` must be full path `gs://<bucket>/<blob>`
+    `filename` name of local file to save defaults to remote name
+    `directory` save files to directory
     '''
     if not _gsBucket:
         raise Exception('GS Bucket not initialized, run init()')
 
     if filename is None:
         filename = os.path.basename(gs_uri)
-    
+    if directory is not None:
+        filename = os.path.join(directory, filename)
+
+    logging.debug(f"Downloading gs://{path}")    
     if isURI:
         path = pathFromURI(gs_uri)
         _gsBucket.blob(path).download_to_filename(filename)
