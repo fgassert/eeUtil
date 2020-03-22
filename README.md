@@ -37,9 +37,10 @@ pip install -e .
 ### Nice things?
 
 - More consistent python bindings
-- Adds operations for recursive `copy`, `move`, `remove`.
-- GEE paths not starting with `/` or `users/` are relative to your user root folder (`users/<username>` or `projects/<project-id>/assets`)
-- Upload atomatically stages files via Google Cloud Storage
+- Adds recursive `copy`, `move`, `remove`, `setAcl`, `createFolder`.
+- GEE paths not starting with `/`, `users/` `projects/` are relative to your user root folder (`users/<username>` or `projects/<project-id>/assets`)
+- `upload` and `download` stage files via Google Cloud Storage so you don't have
+  to.
 
 ### Usage
 
@@ -67,7 +68,7 @@ eeUtil.init(service_account=GEE_SERVICE_ACCOUNT,
 
  - `service_account` Service account name. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account `[default: GEE_SERVICE_ACCOUNT]`
  - `credential_path` Path to json file containing private key. This or `credential_json` is required for service accounts. `[default: GOOGLE_APPLICATION_CREDENTIALS]`
- - `project` Project to use for GEE and GS bucket. `[default: GEE_PROJECT or CLOUDSDK_CORE_PROJECT]`
+ - `project` Project to use for GEE and GCS bucket. `[default: GEE_PROJECT or CLOUDSDK_CORE_PROJECT]`
  - `bucket` Storage bucket for staging assets for ingestion. Will create new bucket if none provided. `[default: GEE_STAGING_BUCKET]`
  - `credential_json` Pass json string as alternative to `credential_path`. `[default: GEE_JSON]`
 

@@ -162,13 +162,18 @@ def getAcl(asset):
     return ee.data.getAssetAcl(_path(asset))
 
 
-def setAcl(asset, acl={}, overwrite=False):
+def setAcl(asset, acl={}, overwrite=False, recursive=False):
     '''Set ACL of asset
 
     `acl`       ('public'|'private'| ACL specification )
     `overwrite` If false, only change specified values
     '''
-    _acl = {} if overwrite else getAcl(asset)
+    path = _path(asset)
+    if recursive and isFolder(path):
+        children = ls(path, abspath=True)
+        for child in children:
+            setAcl(child, acl, overwrite, recursive)
+    _acl = {} if overwrite else getAcl(path)
     _acl.pop('owners', None)
     if acl == 'public':
         _acl["all_users_can_read"] = True
@@ -177,8 +182,8 @@ def setAcl(asset, acl={}, overwrite=False):
     else:
         _acl.update(acl)
     acl = json.dumps(_acl)
-    logging.debug('Setting ACL to {} on {}'.format(acl, asset))
-    ee.data.setAssetAcl(_path(asset), acl)
+    logging.debug('Setting ACL to {} on {}'.format(acl, path))
+    ee.data.setAssetAcl(path, acl)
 
 
 def setProperties(asset, properties={}):
@@ -197,7 +202,7 @@ def createFolder(path, image_collection=False, overwrite=False,
     if not isFolder(upper):
         createFolder(upper)
     if overwrite or not isFolder(path):
-        ftype = (ee.data.ASSET_TYPE_IMAGE_COLL if imageCollection
+        ftype = (ee.data.ASSET_TYPE_IMAGE_COLL if image_collection
                  else ee.data.ASSET_TYPE_FOLDER)
         logging.debug(f'Created {ftype} {path}')
         ee.data.createAsset({'type': ftype}, path, overwrite)
@@ -213,7 +218,7 @@ def createImageCollection(path, overwrite=False, public=False):
 def copy(src, dest, overwrite=False, recursive=False):
     '''Copy asset'''
     if recursive and isFolder(src):
-        children = ls(src)
+        children = ls(src, abspath=True)
         is_image_collection = info(src)['type'] in (ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD,
                                                     ee.data.ASSET_TYPE_IMAGE_COLL)
         createFolder(dest, is_image_collection)

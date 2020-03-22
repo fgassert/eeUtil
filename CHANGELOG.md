@@ -2,7 +2,7 @@
 
 ## v0.2.0 - 2020-03-21
 ### added
-- added recursive copy, move, remove operations.
+- added recursive copy, move, remove, setacl operations.
 - added `download` function to export and download assets via GCS.
 - `createFolder` now behaves like `mkdir -p`.
 - added `getCWD`, `cd` to get/set working directory.
