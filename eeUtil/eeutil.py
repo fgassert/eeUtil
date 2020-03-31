@@ -218,11 +218,10 @@ def createImageCollection(path, overwrite=False, public=False):
 def copy(src, dest, overwrite=False, recursive=False):
     '''Copy asset'''
     if recursive and isFolder(src):
-        children = ls(src, abspath=True)
         is_image_collection = info(src)['type'] in (ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD,
                                                     ee.data.ASSET_TYPE_IMAGE_COLL)
         createFolder(dest, is_image_collection)
-        for child in children:
+        for child in ls(src):
             copy(os.path.join(src, child), os.path.join(dest, child), overwrite, recursive)
     else:
         ee.data.copyAsset(_path(src), _path(dest), overwrite)
