@@ -12,3 +12,5 @@ folder for staging operations.
 ### changed
 - Compatible with earthengine cloud api
 - No longer compatible with python 2.x
+- ingestAsset no longer accepts date parameter
+- ingestAsset, uploadAsset, uploadAssets deprecated
