@@ -4,6 +4,7 @@ import logging
 import time
 import datetime
 import json
+import warnings
 
 from . import gsbucket
 
@@ -209,7 +210,6 @@ def createFolder(path, image_collection=False, overwrite=False,
     if public:
         setAcl(path, 'public')
 
-
 def createImageCollection(path, overwrite=False, public=False):
     '''Create image collection'''
     createFolder(path, True, overwrite, public)
@@ -231,20 +231,17 @@ def move(src, dest, overwrite=False, recursive=False):
     '''Move asset'''
     src = _path(src)
     copy(src, _path(dest), overwrite, recursive=False)
-    removeAsset(src, recursive)
+    remove(src, recursive)
 
 
-def removeAsset(asset, recursive=False):
+def remove(asset, recursive=False):
     '''Delete asset from GEE'''
     if recursive:
         if isFolder(asset):
             for child in ls(asset, abspath=True):
-                removeAsset(child)
+                remove(child)
     logging.debug('Deleting asset {}'.format(asset))
     ee.data.deleteAsset(_path(asset))
-
-#alias
-remove = removeAsset
 
 
 def formatDate(date):
@@ -286,6 +283,9 @@ def waitForTasks(task_ids=[], timeout=3600):
     '''Wait for tasks to complete, fail, or timeout
     
     Waits for all active tasks if task_ids is not provided
+
+    Note: Tasks will not be canceled after timeout, and 
+    may continue to run.
     '''
     if not task_ids:
         task_ids = [t['id'] for t in getTasks() if t['state'] in (
@@ -314,21 +314,23 @@ def waitForTask(task_id, timeout=3600):
     return waitForTasks([task_id], timeout)
 
 
-def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands=[]):
+def ingestAsset(gs_uri, asset, date=None, wait_timeout=0, bands=[]):
+    '''[DEPRECATED] please use eeUtil.ingest instead'''
+    warnings.warn('[DEPRECATED] please use eeUtil.ingest instead', DeprecationWarning)   
+    return ingest(gs_uri, asset, wait_timeout, bands)
+
+
+def ingest(gs_uri, asset, wait_timeout=0, bands=[]):
     '''
     Upload asset from GS to EE
 
     `gs_uri`       should be formatted `gs://<bucket>/<blob>`
     `asset`        destination path
-    `date`         optional date tag (datetime.datetime or int ms since epoch)
     `wait_timeout` if non-zero, wait timeout secs for task completion
     `bands`        optional band name dictionary
     '''
     params = {'id': _path(asset),
               'tilesets': [{'sources': [{'primaryPath': gs_uri}]}]}
-    if date:
-        params['properties'] = {'system:time_start': formatDate(date),
-                                'system:time_end': formatDate(date)},
     if bands:
         if isinstance(bands[0], str):
             bands = [{'id': b} for b in bands]
@@ -344,48 +346,42 @@ def ingestAsset(gs_uri, asset, date='', wait_timeout=0, bands=[]):
 
 def uploadAsset(filename, asset, gs_prefix='', date='', public=False,
                 timeout=3600, clean=True, bands=[]):
-    '''
-    Stage file to GS and ingest to EE
-
-    `file`         local file paths
-    `asset`        destination path
-    `gs_prefix`    GS folder for staging (else files are staged to bucket root)
-    `date`         optional date tag (datetime.datetime or int ms since epoch)
-    `public`       set acl public if True
-    `timeout`      wait timeout secs for completion of GEE ingestion
-    `clean`        delete files from GS after completion
-    `bands`        band names to assign
-    '''
-    dates = [date] if date else []
-    return uploadAssets([filename], [asset], gs_prefix, dates, public, timeout, clean, bands)[0]
+    '''[DEPRECATED] please use eeUtil.upload instead'''
+    warnings.warn('[DEPRECATED] please use eeUtil.upload instead', DeprecationWarning)
+    return upload([filename], [asset], gs_prefix, public, timeout, clean, bands)[0]
 
 
 def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
                  timeout=3600, clean=True, bands=[]):
-    '''
-    Stage files to GS and ingest to EE
+    '''[DEPRECATED] please use eeUtil.upload instead'''
+    warnings.warn('[DEPRECATED] please use eeUtil.upload instead', DeprecationWarning)
+    return upload(files, assets, gs_prefix, public, timeout, clean, bands)
 
-    `files`        local file paths
-    `assets`       destination paths
+
+def upload(files, assets, gs_prefix='', public=False,
+                 timeout=3600, clean=True, bands=[]):
+    '''Stage files to cloud storage and ingest into Earth Engine
+
+    `files`        local file path or list of paths
+    `assets`       destination asset ID or list of asset IDs
     `gs_prefix`    GS folder for staging (else files are staged to bucket root)
-    `dates`        optional date tags (datetime.datetime or int ms since epoch)
     `public`       set acl public if True
     `timeout`      wait timeout secs for completion of GEE ingestion
     `clean`        delete files from GS after completion
     `bands`        band names to assign, all assets must have the same number of bands
     '''
-    gs_prefix = gs_prefix or _gs_bucket_prefix
-    task_ids = []
+    if type(files) is str and type(assets) is str:
+        files = [files]
+        assets = [assets]
     if len(assets) != len(files):
         raise Exception(f"Files and assets must be of same length. Found {len(files)}, {len(assets)}")
-    if len(dates) and len(dates) != len(assets):
-        raise Exception(f"Must have one date per asset if dates specified. Found {len(dates)}, {len(assets)}")
-    if not dates:
-        dates = ['' for i in range(len(assets))]
+    
+    gs_prefix = gs_prefix or _gs_bucket_prefix
+    task_ids = []
     
     gs_uris = gsbucket.stage(files, gs_prefix)
     for i in range(len(files)):
-        task_ids.append(ingestAsset(gs_uris[i], assets[i], dates[i], 0, bands))
+        task_ids.append(ingest(gs_uris[i], assets[i], wait_timeout, bands))
     
     try:
         waitForTasks(task_ids, timeout)
@@ -399,33 +395,19 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
     
     return assets
 
-# ALIAS
-upload = uploadAssets
+def download(assets, directory=None, gs_prefix='', clean=True, timeout=3600, **kwargs):
+    '''Export image assets to GS and downloads to local machine
 
-
-def downloadAsset(asset, directory=None, gs_prefix='', timeout=3600, clean=True, **kwargs):
-    '''Export image asset to GS and download to local machine
-
-    `asset`     Asset ID
+    `asset`     Asset ID or list of asset IDs
     `directory` Optional local directory to save assets to
     `gs_prefix` GS folder for staging (else files are staged to bucket root)
     `timeout`   Wait timeout secs for GEE export task completion
     `clean`     Remove file from GS after download
     `kwargs`    Additional args to pass to ee.batch.Export.image.toCloudStorage()
     '''
-    return downloadAssets([asset], directory, gs_prefix, clean, timeout, **kwargs)
+    if type(assets) is str:
+        assets = [assets]
 
-
-def downloadAssets(assets, directory=None, gs_prefix='', clean=True, timeout=3600, **kwargs):
-    '''Export image assets to GS and download to local machine
-
-    `asset`     Asset ID
-    `directory` Optional local directory to save assets to
-    `gs_prefix` GS folder for staging (else files are staged to bucket root)
-    `timeout`   Wait timeout secs for GEE export task completion
-    `clean`     Remove file from GS after download
-    `kwargs`    Additional args to pass to ee.batch.Export.image.toCloudStorage()
-    '''
     gs_prefix = gs_prefix or _gs_bucket_prefix
     task_ids = []
     uris = []
@@ -462,5 +444,14 @@ def downloadAssets(assets, directory=None, gs_prefix='', clean=True, timeout=360
 
     return filenames
 
-# ALIAS
-download = downloadAssets
+
+#ALIAS
+mkdir = createFolder
+rm = remove
+mv = move
+cp = copy
+
+
+removeAsset = remove
+downloadAsset = download
+downloadAssets = download
