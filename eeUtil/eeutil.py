@@ -210,6 +210,7 @@ def createFolder(path, image_collection=False, overwrite=False,
     if public:
         setAcl(path, 'public')
 
+
 def createImageCollection(path, overwrite=False, public=False):
     '''Create image collection'''
     createFolder(path, True, overwrite, public)
@@ -258,8 +259,18 @@ def setBucketPrefix(prefix=''):
     _gs_bucket_prefix = prefix
 
 
-def getTasks():
-    '''Return a list of all recent tasks'''
+def getTasks(active=False):
+    '''Return a list of all recent tasks
+
+    If active is true, return tasks with status in 
+    'READY', 'RUNNING', 'UNSUBMITTED'
+    '''
+    if active:
+        return [t for t in ee.data.getTaskList() if t['state'] in (
+            ee.batch.Task.State.READY,
+            ee.batch.Task.State.RUNNING,
+            ee.batch.Task.State.UNSUBMITTED,
+        )]
     return ee.data.getTaskList()
 
 

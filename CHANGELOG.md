@@ -7,7 +7,8 @@
 - `createFolder` now behaves like `mkdir -p`.
 - added `getCWD`, `cd` to get/set working directory.
 - added optional `bucket_prefix` parameter to `init()` to set default bucket
-folder for staging operations. 
+folder for staging operations.
+- added getTasks
 
 ### changed
 - Compatible with earthengine cloud api
