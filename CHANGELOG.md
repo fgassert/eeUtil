@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## v0.2.0 - 2020-03-21
+## v0.2.0 - 2020-05-11
 ### added
 - added recursive copy, move, remove, setacl operations.
 - added `download` function to export and download assets via GCS.
