@@ -5,18 +5,21 @@ Wrapper for easier data management with Earth Engine python sdk
 Requires account with access to Google Cloud Storage and Earth Engine.
 
 ```
-import eeUtil as eu
+import eeUtil
 
 # initialize from environment variables
-eu.init(bucket='mybucket')
+eeUtil.init(project='my-project', bucket='my-bucket')
 
 # create image collection
-eu.createFolder('mycollection', imageCollection=True)
+eeUtil.createFolder('mycollection', imageCollection=True)
 
 # upload image to collection
-eu.upload('image.tif', 'mycollection/myasset')
-eu.setAcl('mycollection', 'public')
-eu.ls('mycollection')
+eeUtil.uploadAsset('image.tif', 'mycollection/myasset')
+eeUtil.setAcl('mycollection', 'public')
+eeUtil.ls('mycollection')
+
+# export image to cloud storage and download
+eeUtil.downloadAsset('mycollection/myasset')
 ```
 
 __Install__
@@ -34,30 +37,39 @@ pip install -e .
 ### Nice things?
 
 - More consistent python bindings
-- GEE paths not starting with `/` or `users/` are relative to your user root folder (`users/<username>`)
-- Upload atomatically stages files via Google Cloud Storage
+- Adds recursive `copy`, `move`, `remove`, `setAcl`, `createFolder`.
+- GEE paths not starting with `/`, `users/` `projects/` are relative to your user root folder (`users/<username>` or `projects/<project-id>/assets`)
+- `upload` and `download` stage files via Google Cloud Storage so you don't have
+  to.
 
 ### Usage
 
-eeUtil defaults to reading from credentials saved by `gcloud auth` for Google Cloud Storage and `earthengine authenticate` for Earth Engine. In your script, initialize these credentials with `eeUtil.init()`. These credentials are read from environment variables as follows.
+The easiest way to authorize eeUtil is using [service account credentials](https://developers.google.com/earth-engine/service_account). Once you create a service account and download your `credentials.json` set these in your environment.
 
 ```
-# environment variables
-export GEE_SERVICE_ACCOUNT=<my-account@gmail.com>
-export GOOGLE_APPLICATION_CREDENTIALS=<path/to/credentials.json>
-export CLOUDSDK_CORE_PROJECT=<my-project>
-export GEE_STAGING_BUCKET=<my-bucket>
+export GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
 ```
 
-Alternatively credentials can be provided directly to `eeUtil.init()` via a json credential file or via a json string in the `GEE_JSON` environment variable.
+Initalize these credentials by calling `eeUtil.init()`.
 
 ```
-eeUtil.init([service_account=], [credential_path=], [project=], [bucket=])
+eeUtil.init()
 ```
- - `service_account` Service account name. If not specficed, reads defaulds from `earthengine authenticate`. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account `[default: GEE_SERVICE_ACCOUNT]`
- - `credential_path` Path to json file containing private key. Required for service accounts. `[default: GOOGLE_APPLICATION_CREDENTIALS]`
- - `project` GCS project containing bucket. Required if account has access to multiple projects. `[default: CLOUDSDK_CORE_PROJECT]`
+
+If you don't provide credentials to eeUtil.init(), it defaults to reading from credentials from the environment, and attempts to read credentials as saved by `earthengine authenticate` for Earth Engine and `gcloud auth application-default login` for Google Cloud Storage. 
+
+```
+eeUtil.init(service_account=GEE_SERVICE_ACCOUNT, 
+            credential_path=GOOGLE_APPLICATION_CREDENTIALS, 
+            project=GEE_PROJECT, 
+            bucket=GEE_STAGING_BUCKET, 
+            credential_json=GEE_JSON)
+```
+
+ - `service_account` Service account name. For more information on GEE service accounts, see: https://developers.google.com/earth-engine/service_account `[default: GEE_SERVICE_ACCOUNT]`
+ - `credential_path` Path to json file containing private key. This or `credential_json` is required for service accounts. `[default: GOOGLE_APPLICATION_CREDENTIALS]`
+ - `project` Project to use for GEE and GCS bucket. `[default: GEE_PROJECT or CLOUDSDK_CORE_PROJECT]`
  - `bucket` Storage bucket for staging assets for ingestion. Will create new bucket if none provided. `[default: GEE_STAGING_BUCKET]`
-
+ - `credential_json` Pass json string as alternative to `credential_path`. `[default: GEE_JSON]`
 
 
