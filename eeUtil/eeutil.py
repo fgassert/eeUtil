@@ -237,10 +237,9 @@ def move(src, dest, overwrite=False, recursive=False):
 
 def remove(asset, recursive=False):
     '''Delete asset from GEE'''
-    if recursive:
-        if isFolder(asset):
-            for child in ls(asset, abspath=True):
-                remove(child)
+    if recursive and isFolder(asset):
+        for child in ls(asset, abspath=True):
+            remove(child, recursive)
     logging.debug('Deleting asset {}'.format(asset))
     ee.data.deleteAsset(_path(asset))
 
