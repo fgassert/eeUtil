@@ -306,7 +306,7 @@ def waitForTasks(task_ids=[], timeout=3600):
 
     start = time.time()
     elapsed = 0
-    while elapsed < timeout:
+    while elapsed < timeout or timeout == 0:
         elapsed = time.time() - start
         finished = [_checkTaskCompleted(task) for task in task_ids]
         if all(finished):
@@ -324,13 +324,18 @@ def waitForTask(task_id, timeout=3600):
     return waitForTasks([task_id], timeout)
 
 
-def ingestAsset(gs_uri, asset, date=None, wait_timeout=0, bands=[]):
+def ingestAsset(gs_uri, asset, date=None, wait_timeout=None, bands=[]):
     '''[DEPRECATED] please use eeUtil.ingest instead'''
     warnings.warn('[DEPRECATED] please use eeUtil.ingest instead', DeprecationWarning)   
     return ingest(gs_uri, asset, wait_timeout, bands)
 
 
-def ingest(gs_uri, asset, wait_timeout=0, bands=[]):
+def _guessIngestTableType(path):
+    if os.path.splitext(path)[-1] in ['.csv', '.zip']:
+        return True
+    return False
+
+def ingest(gs_uri, asset, wait_timeout=None, bands=[]):
     '''
     Upload asset from GS to EE
 
@@ -339,16 +344,22 @@ def ingest(gs_uri, asset, wait_timeout=0, bands=[]):
     `wait_timeout` if non-zero, wait timeout secs for task completion
     `bands`        optional band name dictionary
     '''
-    params = {'id': _path(asset),
-              'tilesets': [{'sources': [{'primaryPath': gs_uri}]}]}
-    if bands:
-        if isinstance(bands[0], str):
-            bands = [{'id': b} for b in bands]
-        params['bands'] = bands
-    request_id = ee.data.newTaskId()[0]
-    task_id = ee.data.startIngestion(request_id, params, True)['id']
+    asset_id = _path(asset)
+    if _guessIngestTableType(gs_uri):
+        params = {'id': asset_id, 'sources': [{'primaryPath': gs_uri}]}
+        request_id = ee.data.newTaskId()[0]
+        task_id = ee.data.startTableIngestion(request_id, params, True)['id']
+    else:
+        # image asset
+        params = {'id': asset_id, 'tilesets': [{'sources': [{'primaryPath': gs_uri}]}]}
+        if bands:
+            if isinstance(bands[0], str):
+                bands = [{'id': b} for b in bands]
+            params['bands'] = bands
+        request_id = ee.data.newTaskId()[0]
+        task_id = ee.data.startIngestion(request_id, params, True)['id']
     logging.debug(f"Ingesting {gs_uri} to {asset}: {task_id}")
-    if wait_timeout:
+    if wait_timeout is not None:
         waitForTask(task_id, wait_timeout)
     
     return task_id
@@ -461,7 +472,7 @@ rm = remove
 mv = move
 cp = copy
 
-
+# old function names
 removeAsset = remove
 downloadAsset = download
 downloadAssets = download
