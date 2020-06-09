@@ -402,7 +402,7 @@ def upload(files, assets, gs_prefix='', public=False,
     
     gs_uris = gsbucket.stage(files, gs_prefix)
     for i in range(len(files)):
-        task_ids.append(ingest(gs_uris[i], assets[i], wait_timeout, bands))
+        task_ids.append(ingest(gs_uris[i], assets[i], timeout, bands))
     
     try:
         waitForTasks(task_ids, timeout)
