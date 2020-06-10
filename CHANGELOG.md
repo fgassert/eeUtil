@@ -1,6 +1,16 @@
 # CHANGELOG
 
+## v0.2.1 - 2020-06-10
+
+### added
+- upload and ingest now accept zipped shapefiles.
+
+### fixed
+- fixed error in recursive remove.
+- fixed error in upload.
+
 ## v0.2.0 - 2020-05-11
+
 ### added
 - added recursive copy, move, remove, setacl operations.
 - added `download` function to export and download assets via GCS.
