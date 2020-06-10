@@ -6,7 +6,7 @@ with open('README.md') as f:
 
 setup(
     name='eeUtil',
-    version='0.2.0',
+    version='0.2.1',
     description='Python wrapper for easier data management on Google Earth Engine.',
     long_description=desc,
     license='MIT',
