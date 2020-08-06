@@ -4,6 +4,8 @@
 
 ### fixed
 - fixed error in recursive setacl of image collections
+- fixed bug in gsbucket.download
+- fixed bug in setting `bucket_prefix` in eeUtil.init
 
 ## v0.2.1 - 2020-06-10
 

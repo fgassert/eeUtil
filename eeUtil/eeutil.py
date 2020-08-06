@@ -56,8 +56,6 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
     if project:
         init_opts['project'] = project
     ee.Initialize(**init_opts)
-    if bucket_prefix:
-        init_opts['prefix'] = bucket_prefix
     try:
         gsbucket.init(bucket, **init_opts)
     except Exception as e:
