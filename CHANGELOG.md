@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v0.2.2 - 2020-08-06
+
+### fixed
+- fixed error in recursive setacl of image collections
+
 ## v0.2.1 - 2020-06-10
 
 ### added

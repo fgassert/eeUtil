@@ -137,15 +137,15 @@ def exists(asset):
     return True if info(asset) else False
 
 
-def isFolder(asset):
+def isFolder(asset, image_collection_ok=True):
     '''Check if path is folder or imageCollection'''
     if ee._cloud_api_utils.is_asset_root(asset):
         return True
     asset_info = info(asset)
-    return asset_info and asset_info['type'] in (ee.data.ASSET_TYPE_FOLDER, 
-                                                 ee.data.ASSET_TYPE_FOLDER_CLOUD,
-                                                 ee.data.ASSET_TYPE_IMAGE_COLL,
-                                                 ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD)
+    folder_types = (ee.data.ASSET_TYPE_FOLDER, ee.data.ASSET_TYPE_FOLDER_CLOUD)
+    if image_collection_ok:
+        folder_types += (ee.data.ASSET_TYPE_IMAGE_COLL, ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD)
+    return asset_info and asset_info['type'] in folder_types
 
 
 def ls(path='', abspath=False):
@@ -170,7 +170,7 @@ def setAcl(asset, acl={}, overwrite=False, recursive=False):
     `overwrite` If false, only change specified values
     '''
     path = _path(asset)
-    if recursive and isFolder(path):
+    if recursive and isFolder(path, image_collection_ok=False):
         children = ls(path, abspath=True)
         for child in children:
             setAcl(child, acl, overwrite, recursive)

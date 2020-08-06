@@ -6,9 +6,10 @@ with open('README.md') as f:
 
 setup(
     name='eeUtil',
-    version='0.2.1',
+    version='0.2.2',
     description='Python wrapper for easier data management on Google Earth Engine.',
     long_description=desc,
+    long_description_content_type='text/markdown',
     license='MIT',
     author='Francis Gassert',
     url='https://github.com/fgassert/eeUtil',
