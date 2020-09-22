@@ -1,11 +1,14 @@
 # CHANGELOG
 
-## v0.2.2 - 2020-08-06
+## v0.2.2 - 2020-09-22
 
 ### fixed
 - fixed error in recursive setacl of image collections
 - fixed bug in gsbucket.download
 - fixed bug in setting `bucket_prefix` in eeUtil.init
+
+### changed
+- bumped google-cloud-storage@1.31.1 and earthengine-api@0.1.232 dependencies
 
 ## v0.2.1 - 2020-06-10
 
