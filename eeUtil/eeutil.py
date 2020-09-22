@@ -56,12 +56,10 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
     if project:
         init_opts['project'] = project
     ee.Initialize(**init_opts)
-    if bucket_prefix:
-        init_opts['prefix'] = bucket_prefix
     try:
         gsbucket.init(bucket, **init_opts)
     except Exception as e:
-        logging.warning("Could not initialize Google Cloud Storage Bucket.")
+        logging.warning("Could not authenticate Google Cloud Storage Bucket. Upload and download functions will not work.")
         logging.error(e)
     if bucket_prefix:
         _gs_bucket_prefix = bucket_prefix
@@ -137,15 +135,15 @@ def exists(asset):
     return True if info(asset) else False
 
 
-def isFolder(asset):
+def isFolder(asset, image_collection_ok=True):
     '''Check if path is folder or imageCollection'''
     if ee._cloud_api_utils.is_asset_root(asset):
         return True
     asset_info = info(asset)
-    return asset_info and asset_info['type'] in (ee.data.ASSET_TYPE_FOLDER, 
-                                                 ee.data.ASSET_TYPE_FOLDER_CLOUD,
-                                                 ee.data.ASSET_TYPE_IMAGE_COLL,
-                                                 ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD)
+    folder_types = (ee.data.ASSET_TYPE_FOLDER, ee.data.ASSET_TYPE_FOLDER_CLOUD)
+    if image_collection_ok:
+        folder_types += (ee.data.ASSET_TYPE_IMAGE_COLL, ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD)
+    return asset_info and asset_info['type'] in folder_types
 
 
 def ls(path='', abspath=False):
@@ -170,7 +168,7 @@ def setAcl(asset, acl={}, overwrite=False, recursive=False):
     `overwrite` If false, only change specified values
     '''
     path = _path(asset)
-    if recursive and isFolder(path):
+    if recursive and isFolder(path, image_collection_ok=False):
         children = ls(path, abspath=True)
         for child in children:
             setAcl(child, acl, overwrite, recursive)
@@ -337,7 +335,7 @@ def _guessIngestTableType(path):
 
 def ingest(gs_uri, asset, wait_timeout=None, bands=[]):
     '''
-    Upload asset from GS to EE
+    Ingest asset from GS to EE
 
     `gs_uri`       should be formatted `gs://<bucket>/<blob>`
     `asset`        destination path
@@ -382,6 +380,8 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
 def upload(files, assets, gs_prefix='', public=False,
                  timeout=3600, clean=True, bands=[]):
     '''Stage files to cloud storage and ingest into Earth Engine
+
+    Currently supports `geotiff`, `zip` (shapefile), and `csv`
 
     `files`        local file path or list of paths
     `assets`       destination asset ID or list of asset IDs

@@ -1,8 +1,11 @@
 import os
 from google.cloud import storage
 import logging
-
 from . import eeutil
+
+# Silence warnings from googleapiclient.discovery_cache
+# see https://github.com/googleapis/google-api-python-client/issues/299
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 # Unary bucket object
 _gsBucket = None
@@ -10,7 +13,6 @@ _gsBucket = None
 def init(bucket=None, project=None, credentials=None):
     '''Initalize google cloud storage bucket'''
     global _gsBucket
-    global _gsBucketPrefix
     if not bucket:
         bucket = _getDefaultBucket()
         logging.warning('No bucket provided, attempting to use default {}'.format(bucket))
@@ -105,7 +107,6 @@ def download(gs_uri, filename=None, directory=None):
     if directory is not None:
         filename = os.path.join(directory, filename)
 
-    logging.debug(f"Downloading gs://{path}")    
-    if isURI:
-        path = pathFromURI(gs_uri)
-        _gsBucket.blob(path).download_to_filename(filename)
+    path = pathFromURI(gs_uri)
+    logging.debug(f"Downloading gs://{path}")
+    _gsBucket.blob(path).download_to_filename(filename)
