@@ -59,7 +59,7 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
     try:
         gsbucket.init(bucket, **init_opts)
     except Exception as e:
-        logging.warning("Could not initialize Google Cloud Storage Bucket.")
+        logging.warning("Could not authenticate Google Cloud Storage Bucket. Upload and download functions will not work.")
         logging.error(e)
     if bucket_prefix:
         _gs_bucket_prefix = bucket_prefix
@@ -335,7 +335,7 @@ def _guessIngestTableType(path):
 
 def ingest(gs_uri, asset, wait_timeout=None, bands=[]):
     '''
-    Upload asset from GS to EE
+    Ingest asset from GS to EE
 
     `gs_uri`       should be formatted `gs://<bucket>/<blob>`
     `asset`        destination path
@@ -380,6 +380,8 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
 def upload(files, assets, gs_prefix='', public=False,
                  timeout=3600, clean=True, bands=[]):
     '''Stage files to cloud storage and ingest into Earth Engine
+
+    Currently supports `geotiff`, `zip` (shapefile), and `csv`
 
     `files`        local file path or list of paths
     `assets`       destination asset ID or list of asset IDs
