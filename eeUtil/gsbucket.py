@@ -1,8 +1,11 @@
 import os
 from google.cloud import storage
 import logging
-
 from . import eeutil
+
+# Silence warnings from googleapiclient.discovery_cache
+# see https://github.com/googleapis/google-api-python-client/issues/299
+logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
 # Unary bucket object
 _gsBucket = None
