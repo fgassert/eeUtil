@@ -1,3 +1,3 @@
-earthengine-api==0.1.215
-google-cloud-storage==1.26.0
+earthengine-api==0.1.232
+google-cloud-storage==1.31.1
 oauth2client==4.1.3

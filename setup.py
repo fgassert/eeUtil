@@ -15,8 +15,8 @@ setup(
     url='https://github.com/fgassert/eeUtil',
     packages=['eeUtil'],
     install_requires=[
-        'earthengine-api>=0.1.200,<0.2',
-        'google-cloud-storage>=1.4.0,<2',
+        'earthengine-api>=0.1.232,<0.2',
+        'google-cloud-storage>=1.31.1,<2',
         'oauth2client>=4,<5'
     ]
 )
