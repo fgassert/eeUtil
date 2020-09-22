@@ -6,6 +6,7 @@
 - fixed error in recursive setacl of image collections
 - fixed bug in gsbucket.download
 - fixed bug in setting `bucket_prefix` in eeUtil.init
+- silence warning on file_cache for oauth>4.0.0
 
 ### changed
 - bumped google-cloud-storage@1.31.1 and earthengine-api@0.1.232 dependencies
