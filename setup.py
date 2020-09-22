@@ -17,6 +17,6 @@ setup(
     install_requires=[
         'earthengine-api>=0.1.232,<0.2',
         'google-cloud-storage>=1.31.1,<2',
-        'oauth2client>=4,<5'
+        'google-api-core>=1.22.2<2'
     ]
 )
