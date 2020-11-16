@@ -24,7 +24,7 @@ eeUtil.downloadAsset('mycollection/myasset')
 
 __Install__
 
-`pip install -e git+https://github.com/fgassert/eeUtil.git#egg=eeUtil`
+`pip install eeUtil`
 
 __Develop__
 
