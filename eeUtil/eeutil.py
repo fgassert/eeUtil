@@ -233,7 +233,7 @@ def move(src, dest, overwrite=False, recursive=False):
     if dest[-1] == '/':
         dest = dest + os.path.basename(src)
     src = _path(src)
-    copy(src, _path(dest), overwrite, recursive=False)
+    copy(src, _path(dest), overwrite, recursive)
     remove(src, recursive)
 
 

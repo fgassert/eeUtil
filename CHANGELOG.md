@@ -2,8 +2,11 @@
 
 ## v0.2.3 - 2021-02-05
 
+### fixed
+- fix recursive move (addresses issue #7).
+
 ### added
-- move or copy into a directory using the same basename by specifying a path with a trailing `/`
+- move or copy into a directory using the same basename by specifying a path with a trailing `/`.
 - upload and ingest now accept `ingest_params` dictionary to pass to `ee.data.startIngestion()`.
 
 ## v0.2.2 - 2020-09-22
