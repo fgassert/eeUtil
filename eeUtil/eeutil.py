@@ -216,6 +216,8 @@ def createImageCollection(path, overwrite=False, public=False):
 
 def copy(src, dest, overwrite=False, recursive=False):
     '''Copy asset'''
+    if dest[-1] == '/':
+        dest = dest + os.path.basename(src)
     if recursive and isFolder(src):
         is_image_collection = info(src)['type'] in (ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD,
                                                     ee.data.ASSET_TYPE_IMAGE_COLL)
@@ -228,8 +230,10 @@ def copy(src, dest, overwrite=False, recursive=False):
 
 def move(src, dest, overwrite=False, recursive=False):
     '''Move asset'''
+    if dest[-1] == '/':
+        dest = dest + os.path.basename(src)
     src = _path(src)
-    copy(src, _path(dest), overwrite, recursive=False)
+    copy(src, _path(dest), overwrite, recursive)
     remove(src, recursive)
 
 
@@ -296,11 +300,7 @@ def waitForTasks(task_ids=[], timeout=3600):
     may continue to run.
     '''
     if not task_ids:
-        task_ids = [t['id'] for t in getTasks() if t['state'] in (
-            ee.batch.Task.State.READY,
-            ee.batch.Task.State.RUNNING,
-            ee.batch.Task.State.UNSUBMITTED,
-        )]
+        task_ids = [t['id'] for t in getTasks(active=True)]
 
     start = time.time()
     elapsed = 0
@@ -333,18 +333,22 @@ def _guessIngestTableType(path):
         return True
     return False
 
-def ingest(gs_uri, asset, wait_timeout=None, bands=[]):
+def ingest(gs_uri, asset, wait_timeout=None, bands=[], ingest_params={}):
     '''
     Ingest asset from GS to EE
 
     `gs_uri`       should be formatted `gs://<bucket>/<blob>`
     `asset`        destination path
     `wait_timeout` if non-zero, wait timeout secs for task completion
-    `bands`        optional band name dictionary
+    `bands`        optional band name list
+    `ingest_params`dict optional additional ingestion params to pass to
+                   ee.data.startIngestion() or ee.data.startTableIngestion()
+                   'id' and 'sources' are provided by this function
     '''
     asset_id = _path(asset)
+    params = ingest_params.copy()
     if _guessIngestTableType(gs_uri):
-        params = {'id': asset_id, 'sources': [{'primaryPath': gs_uri}]}
+        params.update({'id': asset_id, 'sources': [{'primaryPath': gs_uri}]})
         request_id = ee.data.newTaskId()[0]
         task_id = ee.data.startTableIngestion(request_id, params, True)['id']
     else:
@@ -378,18 +382,20 @@ def uploadAssets(files, assets, gs_prefix='', dates=[], public=False,
 
 
 def upload(files, assets, gs_prefix='', public=False,
-                 timeout=3600, clean=True, bands=[]):
+                 timeout=3600, clean=True, bands=[], ingest_params={}):
     '''Stage files to cloud storage and ingest into Earth Engine
 
-    Currently supports `geotiff`, `zip` (shapefile), and `csv`
+    Currently supports `tif`, `zip` (shapefile), and `csv`
 
     `files`        local file path or list of paths
     `assets`       destination asset ID or list of asset IDs
-    `gs_prefix`    GS folder for staging (else files are staged to bucket root)
-    `public`       set acl public if True
+    `gs_prefix`    storage bucket folder for staging (else files are staged to bucket root)
+    `public`       set acl public after upload if True
     `timeout`      wait timeout secs for completion of GEE ingestion
-    `clean`        delete files from GS after completion
-    `bands`        band names to assign, all assets must have the same number of bands
+    `clean`        delete files from storage bucket after completion
+    `bands`        optional band names to assign, all assets must have the same number of bands
+    `ingest_params`optional additional ingestion params to pass to
+                   ee.data.startIngestion() or ee.data.startTableIngestion()
     '''
     if type(files) is str and type(assets) is str:
         files = [files]
@@ -417,7 +423,7 @@ def upload(files, assets, gs_prefix='', public=False,
     return assets
 
 def download(assets, directory=None, gs_prefix='', clean=True, timeout=3600, **kwargs):
-    '''Export image assets to GS and downloads to local machine
+    '''Export image assets to cloud storage, then downloads to local machine
 
     `asset`     Asset ID or list of asset IDs
     `directory` Optional local directory to save assets to
