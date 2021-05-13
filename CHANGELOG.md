@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## v0.3.0 - 2021-05-13
+
+### fixed
+
+### changed
+- Storage operations can take a bucket as an optional parameter instead of always using the default.
+- Storage operations will try to authenticate with default environment credentials the first time they are called.
+
+
 ## v0.2.3 - 2021-02-05
 
 ### fixed
