@@ -7,8 +7,11 @@
 
 ### added
 - Add `tree` function to recursively list assets in folder
+- Add `export`, `exportImage`, and `exportTable` to export assets to cloud storage
 
 ### changed
+- Update `download` to work for image collections
+- Update `download` to be able to recursively download image collections
 - Storage operations can take a bucket as an optional parameter instead of always using the default.
 - Storage operations will try to authenticate with default environment credentials the first time they are called.
 

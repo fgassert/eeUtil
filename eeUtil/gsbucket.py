@@ -70,14 +70,20 @@ def isURI(path, bucket=''):
 
 def pathFromURI(uri):
     '''Returns blob path from URI'''
-    return fromUri(uri)[1]
+    return fromURI(uri)[1]
 
 
-def fromUri(uri):
+def fromURI(uri):
     '''Returns bucket name and blob path from URI'''
     if not isURI(uri):
         raise Exception(f'Path {uri} does not match gs://<bucket>/<blob>')
     return uri[6:].split('/', 1)
+
+
+def exists(uri):
+    '''check if blob exists'''
+    bucket, path = fromURI(uri)
+    return Bucket(bucket).blob(path).exists()
 
 
 def stage(files, prefix='', bucket=None):
@@ -116,7 +122,7 @@ def remove(gs_uris):
 
     paths = {}
     for uri in gs_uris:
-        bucket, path = fromUri(uri)
+        bucket, path = fromURI(uri)
         if bucket in paths:
             paths[bucket].append(path)
         else:
