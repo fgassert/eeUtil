@@ -17,6 +17,11 @@ GEE_PROJECT = os.getenv("GEE_PROJECT") or os.getenv("CLOUDSDK_CORE_PROJECT")
 GEE_STAGING_BUCKET = os.getenv("GEE_STAGING_BUCKET")
 GEE_STAGING_BUCKET_PREFIX = os.getenv("GEE_STAGING_BUCKET_PREFIX")
 
+FOLDER_TYPES = (ee.data.ASSET_TYPE_FOLDER, ee.data.ASSET_TYPE_FOLDER_CLOUD)
+IMAGE_COLLECTION_TYPES = (ee.data.ASSET_TYPE_IMAGE_COLL, ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD)
+IMAGE_TYPES = ('Image', 'IMAGE')
+TABLE_TYPES = ('Table', 'TABLE')
+
 # Unary GEE home directory
 _cwd = ''
 _gs_bucket_prefix = ''
@@ -143,9 +148,9 @@ def isFolder(asset, image_collection_ok=True):
     if ee._cloud_api_utils.is_asset_root(asset):
         return True
     asset_info = info(asset)
-    folder_types = (ee.data.ASSET_TYPE_FOLDER, ee.data.ASSET_TYPE_FOLDER_CLOUD)
+    folder_types = FOLDER_TYPES
     if image_collection_ok:
-        folder_types += (ee.data.ASSET_TYPE_IMAGE_COLL, ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD)
+        folder_types += IMAGE_COLLECTION_TYPES
     return asset_info and asset_info['type'] in folder_types
 
 
@@ -158,6 +163,37 @@ def ls(path='', abspath=False, details=False, pageToken=None):
     if resp['nextPageToken']:
         for a in ls(path, abspath, details, pageToken=resp['nextPageToken']):
             yield a
+
+
+def _tree(folder, details=False, _basepath=''):
+    for item in ls(folder, abspath=True, details=True):
+        if item['type'] in FOLDER_TYPES+IMAGE_COLLECTION_TYPES:
+            for child in _tree(item['name'], details, _basepath):
+                yield child
+        if _basepath and item['name'][:len(_basepath)] == _basepath:
+            item['name'] = item['name'][len(_basepath):]
+        yield (item if details else item['name'])
+
+
+def tree(folder, abspath=False, details=False):
+    '''Recursively list all assets in folder
+    
+    Args:
+        folder (string): Earth Engine folder or image collection
+        relpath (bool): Return the relative path of assets in the folder
+        details (bool): Return a dict representation of each asset instead of only the assetId string 
+    
+    Returns:
+        If details is False:
+        list: paths to assets
+
+        If details is True:
+        list: asset info dicts
+    '''
+    folder = _path(folder)
+    _basepath = '' if abspath else f'{folder.rstrip("/")}/'
+    
+    return _tree(folder, details, _basepath)
 
 
 def getAcl(asset):
@@ -223,8 +259,7 @@ def copy(src, dest, overwrite=False, recursive=False):
     if dest[-1] == '/':
         dest = dest + os.path.basename(src)
     if recursive and isFolder(src):
-        is_image_collection = info(src)['type'] in (ee.data.ASSET_TYPE_IMAGE_COLL_CLOUD,
-                                                    ee.data.ASSET_TYPE_IMAGE_COLL)
+        is_image_collection = info(src)['type'] in IMAGE_COLLECTION_TYPES
         createFolder(dest, is_image_collection)
         for child in ls(src):
             copy(os.path.join(src, child), os.path.join(dest, child), overwrite, recursive)
@@ -335,6 +370,7 @@ def _guessIngestTableType(path):
     if os.path.splitext(path)[-1] in ['.csv', '.zip']:
         return True
     return False
+
 
 def ingest(gs_uri, asset, wait_timeout=None, bands=[], ingest_params={}):
     '''

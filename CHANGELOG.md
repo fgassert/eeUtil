@@ -5,6 +5,9 @@
 ### fixed
 - Paths starting with `/` are assumed to be `earthengine-public` assets if no project is specified.
 
+### added
+- Add `tree` function to recursively list assets in folder
+
 ### changed
 - Storage operations can take a bucket as an optional parameter instead of always using the default.
 - Storage operations will try to authenticate with default environment credentials the first time they are called.
