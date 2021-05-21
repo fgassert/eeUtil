@@ -3,6 +3,7 @@
 ## v0.3.0 - 2021-05-13
 
 ### fixed
+- Paths starting with `/` are assumed to be `earthengine-public` assets if no project is specified.
 
 ### changed
 - Storage operations can take a bucket as an optional parameter instead of always using the default.
