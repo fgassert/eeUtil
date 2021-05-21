@@ -109,14 +109,17 @@ def cd(path):
 def _path(path):
     '''Add cwd to path if not full path'''
     if path:
-        if path[0] == '/':
-            return path[1:]
-        elif len(path) > 6 and path[:6] == 'users/':
-            return path
+        abspath = path[0] == '/'
+        path = path[1:] if abspath else path
+        
+        if len(path) > 6 and path[:6] == 'users/':
+            return f'projects/{ee.data.DEFAULT_CLOUD_API_USER_PROJECT}/{path}'
         elif len(path) > 9 and path[:9] == 'projects/':
             return path
         else:
-            return os.path.join(getCWD(), path)
+            basepath = 'projects/earthengine-public/assets/' if abspath else getCWD()
+            return os.path.join(basepath, path)
+
     return getCWD()
 
 
@@ -146,14 +149,15 @@ def isFolder(asset, image_collection_ok=True):
     return asset_info and asset_info['type'] in folder_types
 
 
-def ls(path='', abspath=False):
+def ls(path='', abspath=False, details=False, pageToken=None):
     '''List assets in path'''
-    if abspath:
-        return [a['id']
-                for a in ee.data.getList({'id': _path(path)})]
-    else:
-        return [os.path.basename(a['id'])
-                for a in ee.data.getList({'id': _path(path)})]
+    resp = ee.data.listAssets({'parent': _path(path), 'pageToken':pageToken})
+    for a in resp['assets']:
+        a['name'] = a['name'] if abspath else os.path.basename(a['name'])
+        yield (a if details else a['name'])
+    if resp['nextPageToken']:
+        for a in ls(path, abspath, details, pageToken=resp['nextPageToken']):
+            yield a
 
 
 def getAcl(asset):
@@ -283,8 +287,7 @@ def _checkTaskCompleted(task_id):
         if 'error_message' in status:
             logging.error(status['error_message'])
         if STRICT:
-            raise Exception(status)
-        logging.error(f"Task {status['id']} ended with state {status['state']}")
+            raise Exception(f"Task {status['id']} ended with state {status['state']}")
         return True
     elif status['state'] == ee.batch.Task.State.COMPLETED:
         return True
@@ -313,7 +316,7 @@ def waitForTasks(task_ids=[], timeout=3600):
         time.sleep(5)
     logging.error(f'Stopped waiting for tasks after {timeout} seconds')
     if STRICT:
-        raise Exception(task_ids)
+        raise Exception(f'Stopped waiting for {len(task_ids)} tasks after {timeout} seconds')
     return False
 
 
