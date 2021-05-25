@@ -29,6 +29,9 @@ _cwd = ''
 _gs_bucket_prefix = ''
 
 
+logger = logging.getLogger(__name__)
+
+
 #######################
 # 0. Config functions #
 #######################
@@ -70,8 +73,8 @@ def init(service_account=GEE_SERVICE_ACCOUNT,
     try:
         gsbucket.init(bucket, **init_opts)
     except Exception as e:
-        logging.warning("Could not authenticate Google Cloud Storage Bucket. Upload and download functions will not work.")
-        logging.error(e)
+        logger.warning("Could not authenticate Google Cloud Storage Bucket. Upload and download functions will not work.")
+        logger.error(e)
     if bucket_prefix:
         _gs_bucket_prefix = bucket_prefix
 
@@ -249,7 +252,7 @@ def setAcl(asset, acl={}, overwrite=False, recursive=False):
     else:
         _acl.update(acl)
     acl = json.dumps(_acl)
-    logging.debug('Setting ACL to {} on {}'.format(acl, path))
+    logger.debug('Setting ACL to {} on {}'.format(acl, path))
     ee.data.setAssetAcl(path, acl)
 
 
@@ -271,7 +274,7 @@ def createFolder(path, image_collection=False, overwrite=False,
     if overwrite or not isFolder(path):
         ftype = (ee.data.ASSET_TYPE_IMAGE_COLL if image_collection
                  else ee.data.ASSET_TYPE_FOLDER)
-        logging.debug(f'Created {ftype} {path}')
+        logger.debug(f'Created {ftype} {path}')
         ee.data.createAsset({'type': ftype}, path, overwrite)
     if public:
         setAcl(path, 'public')
@@ -309,7 +312,7 @@ def remove(asset, recursive=False):
     if recursive and isFolder(asset):
         for child in ls(asset, abspath=True):
             remove(child, recursive)
-    logging.debug('Deleting asset {}'.format(asset))
+    logger.debug('Deleting asset {}'.format(asset))
     ee.data.deleteAsset(_path(asset))
 
 
@@ -338,7 +341,7 @@ def _checkTaskCompleted(task_id):
     if status['state'] in (ee.batch.Task.State.CANCELLED,
                            ee.batch.Task.State.FAILED):
         if 'error_message' in status:
-            logging.error(status['error_message'])
+            logger.error(status['error_message'])
         if STRICT:
             raise Exception(f"Task {status['id']} ended with state {status['state']}")
         return True
@@ -364,10 +367,10 @@ def waitForTasks(task_ids=[], timeout=3600):
         elapsed = time.time() - start
         finished = [_checkTaskCompleted(task) for task in task_ids]
         if all(finished):
-            logging.debug(f'Tasks {task_ids} completed after {elapsed}s')
+            logger.debug(f'Tasks {task_ids} completed after {elapsed}s')
             return True
         time.sleep(5)
-    logging.warning(f'Stopped waiting for {len(task_ids)} tasks after {timeout} seconds')
+    logger.warning(f'Stopped waiting for {len(task_ids)} tasks after {timeout} seconds')
     if STRICT:
         raise Exception(f'Stopped waiting for {len(task_ids)} tasks after {timeout} seconds')
     return False
@@ -421,7 +424,7 @@ def ingest(gs_uri, asset, wait_timeout=None, bands=[], ingest_params={}):
             params['bands'] = bands
         request_id = ee.data.newTaskId()[0]
         task_id = ee.data.startIngestion(request_id, params, True)['id']
-    logging.debug(f"Ingesting {gs_uri} to {asset}: {task_id}")
+    logger.debug(f"Ingesting {gs_uri} to {asset}: {task_id}")
     if wait_timeout is not None:
         waitForTask(task_id, wait_timeout)
 
@@ -477,7 +480,7 @@ def upload(files, assets, gs_prefix='', public=False,
             for asset in assets:
                 setAcl(asset, 'public')
     except Exception as e:
-        logging.error(e)
+        logger.error(e)
     if clean:
         gsbucket.remove(gs_uris)
 
@@ -654,7 +657,7 @@ def saveImage(image, assetId, dtype=None, pyramidingPolicy='mean', wait_timeout=
     if dtype:
         image = _cast(image, dtype)
 
-    logging.debug(f'Exporting image to {path}')
+    logger.debug(f'Exporting image to {path}')
     task = ee.batch.Export.image.toAsset(**args)
     task.start()
     if wait_timeout is not None:
@@ -679,12 +682,12 @@ def findOrSaveImage(image, assetId, wait_timeout=None, **kwargs):
     '''
     path = _path(assetId)
     if exists(path):
-        logging.debug(f'Asset {os.path.basename(path)} exists, using cached asset.')
+        logger.debug(f'Asset {os.path.basename(path)} exists, using cached asset.')
         return ee.Image(path)
     description = kwargs.get('description', _getExportDescription(path))
     existing_task = next(filter(lambda t: t['description'] == description, getTasks(active=True)), None)
     if existing_task:
-        logging.debug(f'Task with description {description} already in progress, skipping export.')
+        logger.debug(f'Task with description {description} already in progress, skipping export.')
         task_id = existing_task['id']
     else:
         task_id = saveImage(image, path, **kwargs)
@@ -742,14 +745,14 @@ def exportImage(image, blob, bucket=None, fileFormat='GeoTIFF', cloudOptimized=F
 
     exists = _getTileBlobs(uri)
     if exists and not overwrite:
-        logging.debug(f'{len(exists)} blobs matching {blob} exists, skipping export')
+        logger.debug(f'{len(exists)} blobs matching {blob} exists, skipping export')
         return
 
     args = _getImageExportArgs(image, bucket, blob, cloudOptimized=cloudOptimized, **kwargs)
     task = ee.batch.Export.image.toCloudStorage(**args)
     task.start()
 
-    logging.debug(f'Exporting to {uri}')
+    logger.debug(f'Exporting to {uri}')
     if wait_timeout is not None:
         waitForTask(task.id)
 
@@ -780,7 +783,7 @@ def exportTable(table, blob, bucket=None, fileFormat='GeoJSON',
     exists = gsbucket.exists(uri)
 
     if exists and not overwrite:
-        logging.debug(f'Blob matching {blobname} exists, skipping export')
+        logger.debug(f'Blob matching {blobname} exists, skipping export')
         return
 
     args = {
@@ -793,7 +796,7 @@ def exportTable(table, blob, bucket=None, fileFormat='GeoJSON',
     task = ee.batch.Export.table.toCloudStorage(**args)
     task.start()
 
-    logging.debug(f'Exporting to {uri}')
+    logger.debug(f'Exporting to {uri}')
     if wait_timeout is not None:
         waitForTask(task.id)
 
@@ -884,7 +887,7 @@ def download(assets, directory=None, gs_bucket=None, gs_prefix='', clean=True, r
             path = gsbucket.pathFromURI(_uri)
             fname = path[len(gs_prefix):].lstrip('/') if gs_prefix else path
             filenames.append(fname)
-            logging.debug('Downloading {uri}')
+            logger.debug('Downloading {uri}')
             gsbucket.download(_uri, fname, directory=directory)
             if clean:
                 gsbucket.remove(_uri)

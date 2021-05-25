@@ -7,6 +7,9 @@ from . import eeutil
 # see https://github.com/googleapis/google-api-python-client/issues/299
 logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
 
+
+logger = logging.getLogger(__name__)
+
 # Unary client object
 _gsClient = None
 _gsBucket = None
@@ -26,7 +29,7 @@ def init(bucket=None, project=None, credentials=None):
     if bucket:
         _gsBucket = _gsClient.bucket(bucket)
         if not _gsBucket.exists():
-            logging.info('Bucket gs://{bucket} does not exist, creating')
+            logger.info('Bucket gs://{bucket} does not exist, creating')
             _gsBucket.create()
 
 
@@ -105,7 +108,7 @@ def stage(files, prefix='', bucket=None):
     for f in files:
         path = os.path.join(prefix, os.path.basename(f))
         uri = asURI(path, bucket)
-        logging.debug(f'Uploading {f} to {uri}')
+        logger.debug(f'Uploading {f} to {uri}')
         Bucket(bucket).blob(path).upload_from_filename(f)
         gs_uris.append(uri)
     return gs_uris
@@ -129,7 +132,7 @@ def remove(gs_uris):
             paths[bucket] = [path]
 
     for bucket, paths in paths:
-        logging.debug(f"Deleting {paths} from gs://{bucket}")
+        logger.debug(f"Deleting {paths} from gs://{bucket}")
         Bucket(bucket).delete_blobs(paths, on_error=lambda x:x)
 
 
@@ -148,5 +151,5 @@ def download(gs_uri, filename=None, directory=None):
         filename = os.path.join(directory, filename)
     
     bucket, path = fromURI(gs_uri)
-    logging.debug(f"Downloading {gs_uri}")
+    logger.debug(f"Downloading {gs_uri}")
     Bucket(bucket).blob(path).download_to_filename(filename)

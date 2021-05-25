@@ -4,6 +4,7 @@
 
 ### fixed
 - Paths starting with `/` are assumed to be `earthengine-public` assets if no project is specified.
+- Use module logger level instead of root logger.
 
 ### added
 - Add `tree` function to recursively list assets in folder
