@@ -367,7 +367,7 @@ def waitForTasks(task_ids=[], timeout=3600):
         elapsed = time.time() - start
         finished = [_checkTaskCompleted(task) for task in task_ids]
         if all(finished):
-            logger.debug(f'Tasks {task_ids} completed after {elapsed}s')
+            logger.info(f'Tasks {task_ids} completed after {elapsed}s')
             return True
         time.sleep(5)
     logger.warning(f'Stopped waiting for {len(task_ids)} tasks after {timeout} seconds')
@@ -424,7 +424,7 @@ def ingest(gs_uri, asset, wait_timeout=None, bands=[], ingest_params={}):
             params['bands'] = bands
         request_id = ee.data.newTaskId()[0]
         task_id = ee.data.startIngestion(request_id, params, True)['id']
-    logger.debug(f"Ingesting {gs_uri} to {asset}: {task_id}")
+    logger.info(f"Ingesting {gs_uri} to {asset}: {task_id}")
     if wait_timeout is not None:
         waitForTask(task_id, wait_timeout)
 
@@ -657,7 +657,7 @@ def saveImage(image, assetId, dtype=None, pyramidingPolicy='mean', wait_timeout=
     if dtype:
         image = _cast(image, dtype)
 
-    logger.debug(f'Exporting image to {path}')
+    logger.info(f'Exporting image to {path}')
     task = ee.batch.Export.image.toAsset(**args)
     task.start()
     if wait_timeout is not None:
@@ -687,7 +687,7 @@ def findOrSaveImage(image, assetId, wait_timeout=None, **kwargs):
     description = kwargs.get('description', _getExportDescription(path))
     existing_task = next(filter(lambda t: t['description'] == description, getTasks(active=True)), None)
     if existing_task:
-        logger.debug(f'Task with description {description} already in progress, skipping export.')
+        logger.info(f'Task with description {description} already in progress, skipping export.')
         task_id = existing_task['id']
     else:
         task_id = saveImage(image, path, **kwargs)
@@ -745,14 +745,14 @@ def exportImage(image, blob, bucket=None, fileFormat='GeoTIFF', cloudOptimized=F
 
     exists = _getTileBlobs(uri)
     if exists and not overwrite:
-        logger.debug(f'{len(exists)} blobs matching {blob} exists, skipping export')
+        logger.info(f'{len(exists)} blobs matching {blob} exists, skipping export')
         return
 
     args = _getImageExportArgs(image, bucket, blob, cloudOptimized=cloudOptimized, **kwargs)
     task = ee.batch.Export.image.toCloudStorage(**args)
     task.start()
 
-    logger.debug(f'Exporting to {uri}')
+    logger.info(f'Exporting to {uri}')
     if wait_timeout is not None:
         waitForTask(task.id)
 
@@ -783,7 +783,7 @@ def exportTable(table, blob, bucket=None, fileFormat='GeoJSON',
     exists = gsbucket.exists(uri)
 
     if exists and not overwrite:
-        logger.debug(f'Blob matching {blobname} exists, skipping export')
+        logger.info(f'Blob matching {blobname} exists, skipping export')
         return
 
     args = {
@@ -796,7 +796,7 @@ def exportTable(table, blob, bucket=None, fileFormat='GeoJSON',
     task = ee.batch.Export.table.toCloudStorage(**args)
     task.start()
 
-    logger.debug(f'Exporting to {uri}')
+    logger.info(f'Exporting to {uri}')
     if wait_timeout is not None:
         waitForTask(task.id)
 
@@ -887,7 +887,6 @@ def download(assets, directory=None, gs_bucket=None, gs_prefix='', clean=True, r
             path = gsbucket.pathFromURI(_uri)
             fname = path[len(gs_prefix):].lstrip('/') if gs_prefix else path
             filenames.append(fname)
-            logger.debug('Downloading {uri}')
             gsbucket.download(_uri, fname, directory=directory)
             if clean:
                 gsbucket.remove(_uri)

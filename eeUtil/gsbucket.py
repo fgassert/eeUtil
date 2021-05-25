@@ -29,7 +29,7 @@ def init(bucket=None, project=None, credentials=None):
     if bucket:
         _gsBucket = _gsClient.bucket(bucket)
         if not _gsBucket.exists():
-            logger.info('Bucket gs://{bucket} does not exist, creating')
+            logger.warning('Bucket gs://{bucket} does not exist, creating')
             _gsBucket.create()
 
 
@@ -108,7 +108,7 @@ def stage(files, prefix='', bucket=None):
     for f in files:
         path = os.path.join(prefix, os.path.basename(f))
         uri = asURI(path, bucket)
-        logger.debug(f'Uploading {f} to {uri}')
+        logger.info(f'Uploading {f} to {uri}')
         Bucket(bucket).blob(path).upload_from_filename(f)
         gs_uris.append(uri)
     return gs_uris
@@ -132,7 +132,7 @@ def remove(gs_uris):
             paths[bucket] = [path]
 
     for bucket, paths in paths:
-        logger.debug(f"Deleting {paths} from gs://{bucket}")
+        logger.info(f"Deleting {paths} from gs://{bucket}")
         Bucket(bucket).delete_blobs(paths, on_error=lambda x:x)
 
 
@@ -151,5 +151,5 @@ def download(gs_uri, filename=None, directory=None):
         filename = os.path.join(directory, filename)
     
     bucket, path = fromURI(gs_uri)
-    logger.debug(f"Downloading {gs_uri}")
+    logger.info(f"Downloading {gs_uri}")
     Bucket(bucket).blob(path).download_to_filename(filename)
