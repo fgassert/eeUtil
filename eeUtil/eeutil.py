@@ -4,6 +4,8 @@ import logging
 import time
 import datetime
 import json
+import math
+import re
 import warnings
 
 from . import gsbucket
@@ -26,6 +28,10 @@ TABLE_TYPES = ('Table', 'TABLE')
 _cwd = ''
 _gs_bucket_prefix = ''
 
+
+#######################
+# 0. Config functions #
+#######################
 
 def init(service_account=GEE_SERVICE_ACCOUNT,
          credential_path=GOOGLE_APPLICATION_CREDENTIALS,
@@ -79,6 +85,28 @@ def initJson(credential_json=GEE_JSON, project=GEE_PROJECT,
     '''
     init('service_account', None, project, bucket, credential_json)
 
+
+def setBucketPrefix(prefix=''):
+    '''Set the default prefix to be used for storage bucket operations'''
+    global _gs_bucket_prefix
+    _gs_bucket_prefix = prefix
+
+
+########################
+# 1. Utility functions #
+########################
+
+def formatDate(date):
+    '''Format date as ms since last epoch'''
+    if isinstance(date, int):
+        return date
+    seconds = (date - datetime.datetime.utcfromtimestamp(0)).total_seconds()
+    return int(seconds * 1000)
+
+
+#################################
+# 2. Asset management functions #
+#################################
 
 def getHome():
     '''Get user root directory'''
@@ -285,19 +313,9 @@ def remove(asset, recursive=False):
     ee.data.deleteAsset(_path(asset))
 
 
-def formatDate(date):
-    '''Format date as ms since last epoch'''
-    if isinstance(date, int):
-        return date
-    seconds = (date - datetime.datetime.utcfromtimestamp(0)).total_seconds()
-    return int(seconds * 1000)
-
-
-def setBucketPrefix(prefix=''):
-    '''Set the default prefix to be used for storage bucket operations'''
-    global _gs_bucket_prefix
-    _gs_bucket_prefix = prefix
-
+################################
+# 3. Task management functions #
+################################
 
 def getTasks(active=False):
     '''Return a list of all recent tasks
@@ -359,6 +377,10 @@ def waitForTask(task_id, timeout=3600):
     '''Wait for task to complete, fail, or timeout'''
     return waitForTasks([task_id], timeout)
 
+
+#######################
+# 4. Import functions #
+#######################
 
 def ingestAsset(gs_uri, asset, date=None, wait_timeout=None, bands=[]):
     '''[DEPRECATED] please use eeUtil.ingest instead'''
@@ -461,54 +483,332 @@ def upload(files, assets, gs_prefix='', public=False,
     
     return assets
 
-def download(assets, directory=None, gs_prefix='', clean=True, timeout=3600, **kwargs):
+
+#######################
+# 5. Export functions #
+#######################
+
+def _getAssetCrs(assetInfo):
+    return assetInfo['bands'][0]['crs']
+
+
+def _getAssetCrsTransform(assetInfo):
+    return assetInfo['bands'][0]['crs_transform']
+
+
+def _getAssetProjection(assetInfo):
+    return ee.Projection(_getAssetCrs(assetInfo), _getAssetCrsTransform(assetInfo))    
+
+
+def _getAssetScale(assetInfo):
+    return _getAssetProjection(assetInfo).nominalScale()
+
+
+def _getExportDescription(path):
+    desc = path.replace('/', ':')
+    return desc[-100:] if len(desc)>100 else desc
+
+
+def _getAssetBounds(assetInfo):
+    coordinates = assetInfo['properties']['system:footprint']['coordinates']
+    if coordinates[0][0] in ['-Infinity', 'Infinity']:
+        coordinates = [
+            [-180, -90],
+            [180, -90],
+            [180, 90],
+            [-180, 90],
+            [-180, -90]
+        ]
+    if _getAssetCrs(assetInfo) == 'EPSG:4326':
+        return ee.Geometry.LinearRing(
+            coords=coordinates,
+            proj='EPSG:4326',
+            geodesic=False
+        )
+    return ee.Geometry.LinearRing(coordinates)
+
+
+def _getAssetBitdepth(assetInfo):
+    bands = assetInfo['bands']
+    bit_depth = 0
+    for band in bands:
+        if band['data_type']['precision'] == 'double':
+            bit_depth += 64
+        elif band['data_type'].get('max'):
+            minval = band['data_type'].get('min', 0)
+            maxval = band['data_type'].get('max')
+            bit_depth += math.log(maxval-minval + 1, 2)
+        else:
+            bit_depth += 32
+    return bit_depth
+
+
+def _getAssetExportDims(proj, scale, bounds, bit_depth):
+    MAX_EXPORT_BYTES = 2**34 # 17179869184
+    proj = ee.Projection(proj) if isinstance(proj, str) else proj
+    proj = proj.atScale(scale)
+    proj_coords = bounds.bounds(1, proj).coordinates().getInfo()[0]
+    topright = proj_coords[2]
+    bottomleft = proj_coords[0]
+    x = topright[0] - bottomleft[0]
+    y = topright[1] - bottomleft[1]
+    x = math.ceil(x / 256.0) * 256
+    y = math.ceil(y / 256.0) * 256
+    total_bytes = x * y * bit_depth / 8
+    if total_bytes > MAX_EXPORT_BYTES:
+        x = y = 2**int(math.log(MAX_EXPORT_BYTES / (bit_depth/8), 2) / 2)
+        print(f'Export size (2^{math.log(total_bytes,2)}) more than 2^{math.log(MAX_EXPORT_BYTES,2)} bytes, dicing to {x}x{y} tiles')
+    
+    return x,y
+
+
+def _getImageExportArgs(image, bucket, fileNamePrefix, cloudOptimized=False, **kwargs):
+    assetInfo = ee.Image(image).getInfo()
+    
+    description = kwargs.get('description') or _getExportDescription(f'gs://{bucket}/{fileNamePrefix}')
+    scale = kwargs.get('scale') or _getAssetScale(assetInfo)
+    proj = kwargs.get('crs') or _getAssetProjection(assetInfo)
+    bounds = kwargs.get('region') or _getAssetBounds(assetInfo)
+    bit_depth = _getAssetBitdepth(assetInfo)
+    dims = kwargs.get('fileDimensions') or _getAssetExportDims(proj, scale, bounds, bit_depth)
+
+    args = {
+        'image': image,
+        'bucket': bucket,
+        'fileNamePrefix': fileNamePrefix,
+        'description': description,
+        'region': bounds,
+        'crs': proj,
+        'scale': scale,
+        'maxPixels': 1e13,
+        'fileDimensions': dims,
+        'fileFormat': 'GeoTIFF',
+        'formatOptions': {
+            'cloudOptimized': cloudOptimized,
+        }
+    }
+    args.update(kwargs)
+
+    return args
+
+
+def _cast(image, dtype):
+    '''Cast an image to a data type'''
+    return {
+        'uint8': image.uint8(),
+        'uint16': image.uint16(),
+        'uint32': image.uint32(),
+        'uint64': image.uint64(),
+        'int8': image.int8(),
+        'int16': image.int16(),
+        'int32': image.int32(),
+        'int64': image.int64(),
+        'byte': image.byte(),
+        'short': image.short(),
+        'int': image.int(),
+        'long': image.long(),
+        'float': image.float(),
+        'double': image.double()
+    }[dtype]
+
+
+def _getTileBlobs(uri):
+    '''Check the existance of an exported image or image tiles
+    
+    Matches either <blob>.tif or <blob>00000000X-00000000X.tif following
+    EE image export tiling naming scheme.
+    
+    Returns:
+        list: List of matching blobs
+    '''
+    bucket, path = gsbucket.fromURI(uri)
+    prefix = f'{os.path.dirname(path)}/'
+    basename, ext = os.path.splitext(os.path.basename(path))
+    
+    blobs = gsbucket.Bucket(bucket).list_blobs(prefix=prefix, delimiter='/')
+    pattern = re.compile(f'{prefix}{basename}(\d{{10}}-\d{{10}})?{ext}$')
+    matches = [gsbucket.asURI(blob.name, bucket) for blob in blobs if pattern.match(blob.name)]
+    
+    return matches
+
+
+def exportImage(image, blob, bucket=None, fileFormat='GeoTIFF', cloudOptimized=False, dtype=None, 
+                overwrite=False, wait_timeout=None, **kwargs):
+    '''Export an Image to cloud storage
+    
+    Args:
+        image (ee.Image): Image to export
+        blob (str): Filename to export to (excluding extention)
+        bucket (str): Cloud storage bucket
+        fileFormat (str): Export file format ['geotiff'|'tfrecord']
+        cloudOptimized (bool): (GeoTIFF only) export as Cloud Optimized GeoTIFF
+        dtype (str): Cast to image to dtype before export ['byte'|'int'|'float'|'double'...]
+        overwrite (bool): Overwrite existing files
+        wait_timeout (int): If non-zero, wait timeout secs for task completion
+        **kwargs: Additional parameters to pass to ee.batch.Export.image.toCloudStorage()
+    
+    Returns:
+        str: taskId
+    '''
+    bucket = gsbucket._defaultBucketName(bucket)
+
+    if dtype:
+        image = _cast(image, dtype)
+    
+    ext = {'geotiff':'.tif', 'tfrecord':'.tfrecord'}[fileFormat.lower()]
+    uri = gsbucket.asURI(blob+ext, bucket)
+
+    exists = _getTileBlobs(uri)
+    if exists and not overwrite:
+        logging.debug(f'{len(exists)} blobs matching {blob} exists, skipping export')
+        return
+
+    args = _getImageExportArgs(image, bucket, blob, cloudOptimized, **kwargs)
+    task = ee.batch.Export.image.toCloudStorage(**args)
+    task.start()
+    
+    logging.debug(f'Exporting to {uri}')
+    if wait_timeout:
+        waitForTask(task)
+        
+    return task, uri
+
+    
+
+def exportTable(table, blob, bucket=None, fileFormat='GeoJSON', 
+                overwrite=False, wait_timeout=None, **kwargs):
+    '''
+    Export FeatureCollection to cloud storage
+    
+    Args:
+        table (ee.FeatureCollection): FeatureCollection to export
+        blob (str): Filename to export to (excluding extention)
+        bucket (str): Cloud storage bucket
+        fileFormat (str): Export file format ['csv'|'geojson'|'shp'|'tfrecord'|'kml'|'kmz']
+        overwrite (bool): Overwrite existing files
+        wait_timeout (int): If non-zero, wait timeout secs for task completion
+        **kwargs: Additional parameters to pass to ee.batch.Export.image.toCloudStorage()
+    '''
+    
+    blobname = f'{blob}.{fileFormat.lower()}'
+    uri = gsbucket.asURI(blobname, bucket)
+    exists = gsbucket.exists(uri)
+    
+    if exists and not overwrite:
+        logging.debug(f'Blob matching {blobname} exists, skipping export')
+        return
+    
+    args = {
+        'collection': table,
+        'description': _getExportDescription(uri),
+        'bucket': gsbucket._defaultBucketName(bucket),
+        'fileNamePrefix': blob
+    }
+    args.update(kwargs)
+    task = ee.batch.Export.table.toCloudStorage(**args)
+    task.start()
+    
+    logging.debug(f'Exporting to {uri}')
+    if wait_timeout:
+        waitForTask(task)
+        
+    return task, uri
+
+
+def export(assets, bucket=None, prefix='', recursive=False,
+           overwrite=False, wait_timeout=None, cloudOptimized=False, **kwargs):
+    '''Export assets to cloud storage
+    
+    Exports one or more assets to cloud storage.
+    FeatureCollections are exported as GeoJSON.
+    Images are exported as GeoTIFF.
+    Use `recursive=True` to export all assets in folders or ImageCollections.
+    
+    Args:
+        assets (str, list): Asset(s) to export
+        bucket (str): Google cloud storage bucket name
+        prefix (str): Optional folder to export assets to (prepended to asset names)
+        recursive (bool): Export all assets in folder or image collection (asset)
+        overwrite (bool): Overwrite existing assets
+        wait_timeout (int): If non-zero, wait timeout secs for task completion
+        cloudOptimized (bool): Export Images as Cloud Optimized GeoTIFFs
+        **kwargs: Additional export arguments passed to ee.batch.Export.{}.toCloudStorage()
+        
+    Returns:
+        (list, list): TaskIds, URIs
+    
+    '''
+    prefix = prefix or _gs_bucket_prefix
+    assets = (assets,) if isinstance(assets, str) else assets
+    paths = [os.path.basename(a) for a in assets]
+    infos = [info(a) for a in assets]
+
+    for item in infos[:]:
+        if item['type'] in FOLDER_TYPES+IMAGE_COLLECTION_TYPES:
+            if recursive:
+                folder = f"{item['name']}/"
+                for c in tree(item['name'], abspath=True, details=True):
+                    infos.append(c)
+                    paths.append(c['name'][len(folder):])
+            else:
+                raise Exception(f"{item['name']} is a folder/ImageCollection. Use recursive=True to export all assets in folder")
+
+    tasks = []
+    uris = []
+    for item, path in zip(infos, paths):
+        blob = os.path.join(prefix, path)
+        task = None
+        if item['type'] in IMAGE_TYPES:
+            image = ee.Image(item['name'])
+            task = exportImage(image, bucket, blob, cloudOptimized=cloudOptimized, overwrite=overwrite, **kwargs)
+        elif item['type'] in TABLE_TYPES:
+            table = ee.FeatureCollection(item['name'])
+            task = exportTable(table, bucket, blob, overwrite=overwrite, **kwargs)
+        if task:
+            tasks.append(task)
+            uris.append(gsbucket.asURI(blob, bucket))
+        
+    if wait_timeout:
+        waitForTasks(tasks)
+    
+    return tasks, uris
+
+
+def download(assets, directory=None, gs_bucket=None, gs_prefix='', clean=True, recursive=False, timeout=3600, **kwargs):
     '''Export image assets to cloud storage, then downloads to local machine
 
     `asset`     Asset ID or list of asset IDs
     `directory` Optional local directory to save assets to
+    `gs_prefix` GS bucket for staging (else default bucket)
     `gs_prefix` GS folder for staging (else files are staged to bucket root)
-    `timeout`   Wait timeout secs for GEE export task completion
     `clean`     Remove file from GS after download
-    `kwargs`    Additional args to pass to ee.batch.Export.image.toCloudStorage()
+    `recursive` Download all assets in folders
+    `timeout`   Wait timeout secs for GEE export task completion
+    `kwargs`    Additional args to pass to ee.batch.Export.{}.toCloudStorage()
     '''
-    if type(assets) is str:
-        assets = [assets]
-
     gs_prefix = gs_prefix or _gs_bucket_prefix
-    task_ids = []
-    uris = []
-    if not os.path.isdir(directory):
+    if directory and not os.path.isdir(directory):
         raise Exception(f"Folder {directory} does not exist")
-    for asset in assets:
-        image = ee.Image(_path(asset))
-        path = os.path.join(gs_prefix, os.path.basename(asset))
-
-        task = ee.batch.Export.image.toCloudStorage(
-            image,
-            bucket=gsbucket.getName(),
-            fileNamePrefix=path,
-            **kwargs
-        )
-        task.start()
-        task_ids.append(task.id)
-
-        uri = f'{gsbucket.asURI(path)}.tif'
-        uris.append(uri)
-
-        logging.debug(f"Exporting asset {asset} to {uri}")
-
+    
+    tasks, uris = export(assets, gs_bucket, gs_prefix, recursive, overwrite=True, wait_timeout=timeout, **kwargs)
+    
     filenames = []
 
-    try:
-        waitForTasks(task_ids, timeout)
-        for uri in uris:
-            gsbucket.download(uri, directory=directory)
+    for uri in uris:
+        for _uri in _getTileBlobs(uri):
+            path = gsbucket.pathFromURI(_uri)
+            fname = path[len(gs_prefix):].lstrip('/') if gs_prefix else path
+            filenames.append(fname)
+            logging.debug('Downloading {uri}')
+            gsbucket.download(_uri, fname, directory=directory)
             if clean:
-                gsbucket.remove(uri)
-    except Exception as e:
-        logging.error(e)
-
+                gsbucket.remove(_uri)
+        
     return filenames
+
+
+
+
 
 
 #ALIAS
