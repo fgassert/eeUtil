@@ -658,9 +658,9 @@ def saveImage(image, assetId, dtype=None, pyramidingPolicy='mean', wait_timeout=
     task = ee.batch.Export.image.toAsset(**args)
     task.start()
     if wait_timeout is not None:
-        waitForTask(task['id'], wait_timeout)
+        waitForTask(task.id, wait_timeout)
 
-    return task['id']
+    return task.id
 
 
 def findOrSaveImage(image, assetId, wait_timeout=None, **kwargs):
@@ -751,9 +751,9 @@ def exportImage(image, blob, bucket=None, fileFormat='GeoTIFF', cloudOptimized=F
 
     logging.debug(f'Exporting to {uri}')
     if wait_timeout is not None:
-        waitForTask(task)
+        waitForTask(task.id)
 
-    return task, uri
+    return task.id, uri
 
 
 
@@ -795,9 +795,9 @@ def exportTable(table, blob, bucket=None, fileFormat='GeoJSON',
 
     logging.debug(f'Exporting to {uri}')
     if wait_timeout is not None:
-        waitForTask(task)
+        waitForTask(task.id)
 
-    return task, uri
+    return task.id, uri
 
 
 def export(assets, bucket=None, prefix='', recursive=False,
