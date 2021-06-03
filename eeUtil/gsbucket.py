@@ -80,7 +80,7 @@ def fromURI(uri):
     '''Returns bucket name and blob path from URI'''
     if not isURI(uri):
         raise Exception(f'Path {uri} does not match gs://<bucket>/<blob>')
-    return uri[6:].split('/', 1)
+    return uri[5:].split('/', 1)
 
 
 def exists(uri):
