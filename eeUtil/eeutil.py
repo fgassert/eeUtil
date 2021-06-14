@@ -191,7 +191,7 @@ def ls(path='', abspath=False, details=False, pageToken=None):
     for a in resp['assets']:
         a['name'] = a['name'] if abspath else os.path.basename(a['name'])
         yield (a if details else a['name'])
-    if resp['nextPageToken']:
+    if 'nextPageToken' in resp:
         for a in ls(path, abspath, details, pageToken=resp['nextPageToken']):
             yield a
 
