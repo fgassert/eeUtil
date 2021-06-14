@@ -848,10 +848,10 @@ def export(assets, bucket=None, prefix='', recursive=False,
         task = None
         if item['type'] in IMAGE_TYPES:
             image = ee.Image(item['name'])
-            task, uri = exportImage(image, bucket, blob, cloudOptimized=cloudOptimized, overwrite=overwrite, **kwargs)
+            task, uri = exportImage(image, blob, bucket, cloudOptimized=cloudOptimized, overwrite=overwrite, **kwargs)
         elif item['type'] in TABLE_TYPES:
             table = ee.FeatureCollection(item['name'])
-            task, uri = exportTable(table, bucket, blob, overwrite=overwrite, **kwargs)
+            task, uri = exportTable(table, blob, bucket, overwrite=overwrite, **kwargs)
         if task and uri:
             tasks.append(task)
             uris.append(uri)
