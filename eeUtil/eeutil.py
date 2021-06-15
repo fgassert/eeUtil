@@ -554,7 +554,7 @@ def _getAssetExportDims(proj, scale, bounds, bit_depth):
     total_bytes = x * y * bit_depth / 8
     if total_bytes > MAX_EXPORT_BYTES:
         x = y = 2**int(math.log(MAX_EXPORT_BYTES / (bit_depth/8), 2) / 2)
-        print(f'Export size (2^{math.log(total_bytes,2)}) more than 2^{math.log(MAX_EXPORT_BYTES,2)} bytes, dicing to {x}x{y} tiles')
+        logging.warning(f'Export size (2^{math.log(total_bytes,2)}) more than 2^{math.log(MAX_EXPORT_BYTES,2)} bytes, dicing to {x}x{y} tiles')
 
     return x,y
 
@@ -790,6 +790,7 @@ def exportTable(table, blob, bucket=None, fileFormat='GeoJSON',
         'collection': table,
         'description': _getExportDescription(uri),
         'bucket': gsbucket._defaultBucketName(bucket),
+        'fileFormat': fileFormat,
         'fileNamePrefix': blob
     }
     args.update(kwargs)
@@ -848,11 +849,12 @@ def export(assets, bucket=None, prefix='', recursive=False,
         task = None
         if item['type'] in IMAGE_TYPES:
             image = ee.Image(item['name'])
-            task, uri = exportImage(image, blob, bucket, cloudOptimized=cloudOptimized, overwrite=overwrite, **kwargs)
+            result = exportImage(image, blob, bucket, cloudOptimized=cloudOptimized, overwrite=overwrite, **kwargs)
         elif item['type'] in TABLE_TYPES:
             table = ee.FeatureCollection(item['name'])
-            task, uri = exportTable(table, blob, bucket, overwrite=overwrite, **kwargs)
-        if task and uri:
+            result = exportTable(table, blob, bucket, overwrite=overwrite, **kwargs)
+        if result:
+            task, uri = result
             tasks.append(task)
             uris.append(uri)
 
