@@ -846,7 +846,7 @@ def export(assets, bucket=None, prefix='', recursive=False,
     uris = []
     for item, path in zip(infos, paths):
         blob = os.path.join(prefix, path)
-        task = None
+        result = None
         if item['type'] in IMAGE_TYPES:
             image = ee.Image(item['name'])
             result = exportImage(image, blob, bucket, cloudOptimized=cloudOptimized, overwrite=overwrite, **kwargs)
