@@ -554,7 +554,7 @@ def _getAssetExportDims(proj, scale, bounds, bit_depth):
     total_bytes = x * y * bit_depth / 8
     if total_bytes > MAX_EXPORT_BYTES:
         x = y = 2**int(math.log(MAX_EXPORT_BYTES / (bit_depth/8), 2) / 2)
-        logging.warning(f'Export size (2^{math.log(total_bytes,2)}) more than 2^{math.log(MAX_EXPORT_BYTES,2)} bytes, dicing to {x}x{y} tiles')
+        logger.warning(f'Export size (2^{math.log(total_bytes,2)}) more than 2^{math.log(MAX_EXPORT_BYTES,2)} bytes, dicing to {x}x{y} tiles')
 
     return x,y
 
@@ -619,21 +619,20 @@ def _getImageSaveArgs(image, assetId, description=None, pyramidingPolicy='mean',
 def _cast(image, dtype):
     '''Cast an image to a data type'''
     return {
-        'uint8': image.uint8(),
-        'uint16': image.uint16(),
-        'uint32': image.uint32(),
-        'uint64': image.uint64(),
-        'int8': image.int8(),
-        'int16': image.int16(),
-        'int32': image.int32(),
-        'int64': image.int64(),
-        'byte': image.byte(),
-        'short': image.short(),
-        'int': image.int(),
-        'long': image.long(),
-        'float': image.float(),
-        'double': image.double()
-    }[dtype]
+        'uint8': image.uint8,
+        'uint16': image.uint16,
+        'uint32': image.uint32,
+        'int8': image.int8,
+        'int16': image.int16,
+        'int32': image.int32,
+        'int64': image.int64,
+        'byte': image.byte,
+        'short': image.short,
+        'int': image.int,
+        'long': image.long,
+        'float': image.float,
+        'double': image.double
+    }[dtype]()
 
 
 def saveImage(image, assetId, dtype=None, pyramidingPolicy='mean', wait_timeout=None, **kwargs):
