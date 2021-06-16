@@ -1,4 +1,5 @@
 import os
+import re
 from google.cloud import storage
 import logging
 from . import eeutil
@@ -153,3 +154,23 @@ def download(gs_uri, filename=None, directory=None):
     bucket, path = fromURI(gs_uri)
     logger.info(f"Downloading {gs_uri}")
     Bucket(bucket).blob(path).download_to_filename(filename)
+
+
+def getTileBlobs(uri):
+    '''Check the existance of an exported image or image tiles
+
+    Matches either <blob>.tif or <blob>00000000X-00000000X.tif following
+    EE image export tiling naming scheme.
+
+    Returns:
+        list: List of matching blobs
+    '''
+    bucket, path = fromURI(uri)
+    prefix = f'{os.path.dirname(path)}/'
+    basename, ext = os.path.splitext(os.path.basename(path))
+
+    blobs = Bucket(bucket).list_blobs(prefix=prefix, delimiter='/')
+    pattern = re.compile(rf'{prefix}{basename}(\d{{10}}-\d{{10}})?{ext}$')
+    matches = [asURI(blob.name, bucket) for blob in blobs if pattern.match(blob.name)]
+
+    return matches

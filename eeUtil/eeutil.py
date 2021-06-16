@@ -5,7 +5,6 @@ import time
 import datetime
 import json
 import math
-import re
 import warnings
 
 from . import gsbucket
@@ -542,8 +541,6 @@ def _getAssetBitdepth(assetInfo):
 
 def _getAssetExportDims(proj, scale, bounds, bit_depth, cloudOptimized=False):
     MAX_EXPORT_BYTES = 2**34 # 17179869184
-    if cloudOptimized:
-        MAX_EXPORT_BYTES = MAX_EXPORT_BYTES * 3/4 # Overviews increase size by 1/3
 
     proj = ee.Projection(proj) if isinstance(proj, str) else proj
     proj = proj.atScale(scale)
@@ -702,26 +699,6 @@ def findOrSaveImage(image, assetId, wait_timeout=None, **kwargs):
     return image
 
 
-def _getTileBlobs(uri):
-    '''Check the existance of an exported image or image tiles
-
-    Matches either <blob>.tif or <blob>00000000X-00000000X.tif following
-    EE image export tiling naming scheme.
-
-    Returns:
-        list: List of matching blobs
-    '''
-    bucket, path = gsbucket.fromURI(uri)
-    prefix = f'{os.path.dirname(path)}/'
-    basename, ext = os.path.splitext(os.path.basename(path))
-
-    blobs = gsbucket.Bucket(bucket).list_blobs(prefix=prefix, delimiter='/')
-    pattern = re.compile(f'{prefix}{basename}(\d{{10}}-\d{{10}})?{ext}$')
-    matches = [gsbucket.asURI(blob.name, bucket) for blob in blobs if pattern.match(blob.name)]
-
-    return matches
-
-
 def exportImage(image, blob, bucket=None, fileFormat='GeoTIFF', cloudOptimized=False, dtype=None,
                 overwrite=False, wait_timeout=None, **kwargs):
     '''Export an Image to cloud storage
@@ -748,7 +725,7 @@ def exportImage(image, blob, bucket=None, fileFormat='GeoTIFF', cloudOptimized=F
     ext = {'geotiff':'.tif', 'tfrecord':'.tfrecord'}[fileFormat.lower()]
     uri = gsbucket.asURI(blob+ext, bucket)
 
-    exists = _getTileBlobs(uri)
+    exists = gsbucket.getTileBlobs(uri)
     if exists and not overwrite:
         logger.info(f'{len(exists)} blobs matching {blob} exists, skipping export')
         return
