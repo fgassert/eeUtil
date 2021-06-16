@@ -112,9 +112,9 @@ def formatDate(date):
 
 def getHome():
     '''Get user root directory'''
-    assetRoots = ee.data.getAssetRoots()
     project = ee._cloud_api_utils._cloud_api_user_project
     if project == ee.data.DEFAULT_CLOUD_API_USER_PROJECT:
+        assetRoots = ee.data.getAssetRoots()
         if not len(assetRoots):
             raise Exception(f"No available assets for provided credentials in project {project}")
         return assetRoots[0]['id']
@@ -869,7 +869,7 @@ def download(assets, directory=None, gs_bucket=None, gs_prefix='', clean=True, r
     filenames = []
 
     for uri in uris:
-        for _uri in _getTileBlobs(uri):
+        for _uri in gsbucket.getTileBlobs(uri):
             path = gsbucket.pathFromURI(_uri)
             fname = path[len(gs_prefix):].lstrip('/') if gs_prefix else path
             filenames.append(fname)
