@@ -540,8 +540,11 @@ def _getAssetBitdepth(assetInfo):
     return bit_depth
 
 
-def _getAssetExportDims(proj, scale, bounds, bit_depth):
+def _getAssetExportDims(proj, scale, bounds, bit_depth, cloudOptimized=False):
     MAX_EXPORT_BYTES = 2**34 # 17179869184
+    if cloudOptimized:
+        MAX_EXPORT_BYTES = MAX_EXPORT_BYTES * 3/4 # Overviews increase size by 1/3
+
     proj = ee.Projection(proj) if isinstance(proj, str) else proj
     proj = proj.atScale(scale)
     proj_coords = bounds.bounds(1, proj).coordinates().getInfo()[0]
@@ -551,9 +554,12 @@ def _getAssetExportDims(proj, scale, bounds, bit_depth):
     y = topright[1] - bottomleft[1]
     x = math.ceil(x / 256.0) * 256
     y = math.ceil(y / 256.0) * 256
-    total_bytes = x * y * bit_depth / 8
+    byte_depth = bit_depth / 8
+    total_bytes = x * y * byte_depth
     if total_bytes > MAX_EXPORT_BYTES:
-        x = y = 2**int(math.log(MAX_EXPORT_BYTES / (bit_depth/8), 2) / 2)
+        depth = int(math.log(MAX_EXPORT_BYTES / byte_depth, 2))
+        y = 2 ** (depth // 2)
+        x = 2 ** (depth // 2 + depth % 2)
         logger.warning(f'Export size (2^{math.log(total_bytes,2)}) more than 2^{math.log(MAX_EXPORT_BYTES,2)} bytes, dicing to {x}x{y} tiles')
 
     return x,y
@@ -569,7 +575,7 @@ def _getImageExportArgs(image, bucket, fileNamePrefix,
     scale = scale or _getAssetScale(assetInfo)
     crs = crs or _getAssetProjection(assetInfo)
     region = region or _getAssetBounds(assetInfo)
-    fileDimensions = fileDimensions or _getAssetExportDims(crs, scale, region, _getAssetBitdepth(assetInfo))
+    fileDimensions = fileDimensions or _getAssetExportDims(crs, scale, region, _getAssetBitdepth(assetInfo), cloudOptimized)
 
     args = {
         'image': image,
@@ -652,9 +658,9 @@ def saveImage(image, assetId, dtype=None, pyramidingPolicy='mean', wait_timeout=
         str: task id
     '''
     path = _path(assetId)
-    args = _getImageSaveArgs(image, path, pyramidingPolicy=pyramidingPolicy, **kwargs)
     if dtype:
         image = _cast(image, dtype)
+    args = _getImageSaveArgs(image, path, pyramidingPolicy=pyramidingPolicy, **kwargs)
 
     logger.info(f'Exporting image to {path}')
     task = ee.batch.Export.image.toAsset(**args)
@@ -832,6 +838,8 @@ def export(assets, bucket=None, prefix='', recursive=False,
     infos = [info(a) for a in assets]
 
     for item in infos[:]:
+        if item is None:
+            raise Exception('Asset does not exist.')
         if item['type'] in FOLDER_TYPES+IMAGE_COLLECTION_TYPES:
             if recursive:
                 folder = f"{item['name']}/"
